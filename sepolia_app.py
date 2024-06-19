@@ -1,6 +1,13 @@
 from stable_baselines3 import PPO
 from flask import Flask, render_template, request
 from apscheduler.schedulers.background import BackgroundScheduler
+from flask import jsonify
+
+from flask import jsonify
+import plotly.io as pio
+
+from plotly.utils import PlotlyJSONEncoder
+import json
 
 
 import plotly.graph_objs as go
@@ -11,6 +18,20 @@ import matplotlib.pyplot as plt
 import datetime as dt
 import os
 
+import os
+from starknet_py.net.client import Client
+from starknet_py.net.signer import StarkCurveSigner
+from starknet_py.net.account.account_client import AccountClient
+from starknet_py.contract import Contract
+from starknet_py.net.networks import TESTNET
+import asyncio
+
+from starknet_py.net.client import Client
+from starknet_py.net.signer import StarkCurveSigner
+from starknet_py.net.account.account_client import AccountClient
+from starknet_py.contract import Contract
+from starknet_py.net.networks import TESTNET
+import asyncio
 
 
 import plotly.graph_objs as go
@@ -40,6 +61,39 @@ import time
 app = Flask(__name__, template_folder='templates')
 print(f"Current working directory: {os.getcwd()}")
 
+# Set up the account and client
+PRIVATE_KEY = os.getenv('PRIVATE_KEY')
+ACCOUNT_ADDRESS = os.getenv('ACCOUNT_ADDRESS')
+CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS')
+GATEWAY_URL = "https://alpha4.starknet.io"
+
+key_pair = KeyPair.from_private_key(int(PRIVATE_KEY, 16))
+signer = StarkCurveSigner(ACCOUNT_ADDRESS, key_pair, "testnet")
+account_client = AccountClient(
+    client=GatewayClient(GATEWAY_URL),
+    address=ACCOUNT_ADDRESS,
+    signer=signer
+)
+
+async def rebalance_portfolio(new_compositions):
+    # Prepare the calldata
+    calldata = [
+        new_compositions['wsteth'], 
+        new_compositions['reth'], 
+        new_compositions['sfrxeth']
+    ]
+
+    # Create the invoke transaction
+    invoke_transaction = InvokeFunction(
+        contract_address=CONTRACT_ADDRESS,
+        entry_point_selector="rebalance",
+        calldata=calldata
+    )
+
+    # Execute the transaction
+    result = await account_client.execute(invoke_transaction)
+    print(f"Rebalance transaction hash: {result.transaction_hash}")
+
 
 days_start_dev = pd.to_datetime('2024-06-17 01:00:00')
 data_points = 1000
@@ -51,7 +105,7 @@ days_left = last_date - today
 lst_prices_query = sql(today)
 api_key = st.secrets["api_key"]
 
-@st.cache_data(ttl='1h')
+@st.cache_data(ttl='1m')
 def createQueryRun(sql):
     print('starting createQueryRun...')
     url = "https://api-v2.flipsidecrypto.xyz/json-rpc"
@@ -77,7 +131,7 @@ def createQueryRun(sql):
     query_run_id = response_data['result']['queryRun']['id']
     return response_data, query_run_id
 
-@st.cache_data(ttl='1h')
+@st.cache_data(ttl='1m')
 def getQueryResults(query_run_id, attempts=10, delay=30):
     print('starting getQueryResults...')
     """Fetch query results with retries for asynchronous completion."""
@@ -154,10 +208,26 @@ except Exception as e:
 
 
 
+
+
+   
+
+
+
+
+
 print('starting index...')
 @app.route('/')
 def index():
     print('starting index...')
+    return render_template('index.html')
+
+
+@app.route('/latest-data')
+def latest_data():
+    global today, days_left, prices_df, three_month_tbill, current_risk_free
+    today = dt.date.today()
+    days_left = last_date - today
     
 
     data_times = {
@@ -188,6 +258,8 @@ def index():
 
     start_date = str((price_timeseries['ds'].min()).strftime('%Y-%m-%d %H:%M:%S'))
     end_date = dt.datetime.now().strftime('%Y-%m-%d %H:00:00')
+    end_time_fix = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
+
 
 
 
@@ -233,6 +305,11 @@ def index():
         actions_df = env.get_actions_df()
         portfolio_values_df = env.get_portfolio_values_df()
         compositions_df = env.get_compositions_df()
+
+        new_compositions = compositions_df.iloc[-1].to_dict()
+        print('new compositions', new_compositions)
+        asyncio.run(rebalance_portfolio(new_compositions))
+
         return states_df, rewards_df, actions_df, portfolio_values_df, compositions_df
 
     seed = 20
@@ -273,7 +350,7 @@ def index():
         legend=dict(x=1.05, y=0.5),
         margin=dict(l=40, r=40, t=40, b=80)
     )
-    graph_html_1 = pyo.plot(fig1, output_type='div')
+    graph_json_1 = json.dumps(fig1, cls=PlotlyJSONEncoder)
 
     #graph_html = pyo.plot(fig, output_type='div')
 
@@ -300,7 +377,7 @@ def index():
     )
     
     fig2 = go.Figure(data=traces, layout=layout)
-    graph_html_2 = pyo.plot(fig2, output_type='div')
+    graph_json_2 = json.dumps(fig2, cls=PlotlyJSONEncoder)
 
     #graph_html += pyo.plot(fig, output_type='div')
     comparison_end = portfolio_values_df.index.max()
@@ -326,7 +403,8 @@ def index():
     )
     
     fig3 = go.Figure(data=traces, layout=layout)
-    graph_html_3 = pyo.plot(fig3, output_type='div')
+    graph_json_3 = json.dumps(fig3, cls=PlotlyJSONEncoder)
+
 
     #graph_html += pyo.plot(fig, output_type='div')
 
@@ -392,18 +470,18 @@ def index():
     #graph_html_2 = pyo.plot(fig2, output_type='div')
     #graph_html_3 = pyo.plot(fig3, output_type='div')
 
-    graph_html = f"{graph_html_1}<br>{graph_html_2}<br>{graph_html_3}"
+    #graph_html = f"{graph_html_1}<br>{graph_html_2}<br>{graph_html_3}"
 
 
 
 
     data_df = pd.DataFrame([results])
 
-    data_df.to_csv(f'data/flask_app_results.csv')
+    data_df.to_csv(f'data/sepolia_app_results/sepolia_app_results{end_time_fix}.csv')
 
 
 
-    return render_template('index.html', graph_html_1=graph_html_1, graph_html_2 = graph_html_2, graph_html_3 = graph_html_3, results=results)
+    return jsonify({"results": results, "graph_1": graph_json_1, "graph_2": graph_json_2, "graph_3": graph_json_3})
 
 def fetch_data():
     global prices_df, three_month_tbill, current_risk_free
@@ -413,7 +491,6 @@ def fetch_data():
             price_df_json = getQueryResults(q_id_price)
             if price_df_json:
                 print('obtaining price json')
-                # Process and display the balance sheet data
                 prices_df = pd.DataFrame(price_df_json['result']['rows'])
             else:
                 print('Failed to get price results')
@@ -430,15 +507,19 @@ def fetch_data():
         print(f"Error in fetching tbill data: {e}")
 
     with app.app_context():
-        index()  # Call index() to update the displayed results
+        latest_data()  # Call index() to update the displayed results
 
-fetch_data()  # Initial fetch
+    asyncio.run(rebalance_portfolio())  # Rebalance the portfolio on Starknet
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(fetch_data, 'interval', hours=1)
-scheduler.start()
 
 if __name__ == "__main__":
+    fetch_data()  # Initial fetch
+
+    # Set up the scheduler
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(fetch_data, 'cron', minute=0)  # This will run the job at the start of every hour
+    scheduler.start()
+
     print('Starting Flask app...')
     app.run(debug=True, use_debugger=True, use_reloader=False)
     print('Flask app ending.')

@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 
 
@@ -36,6 +36,8 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import matplotlib.pyplot as plt
 import time
+import json
+
 
 app = Flask(__name__, template_folder='templates')
 print(f"Current working directory: {os.getcwd()}")
@@ -45,13 +47,14 @@ days_start_dev = pd.to_datetime('2024-06-17 01:00:00')
 data_points = 1000
 data_points_days = data_points / 24
 last_date = days_start_dev + timedelta(days=data_points_days)
-last_date = last_date.date() 
+last_date = last_date.date()
 today = dt.date.today()
-days_left = last_date - today 
+days_left = last_date - today
 lst_prices_query = sql(today)
+
 api_key = st.secrets["api_key"]
 
-@st.cache_data(ttl='1h')
+@st.cache_data(ttl='1m')
 def createQueryRun(sql):
     print('starting createQueryRun...')
     url = "https://api-v2.flipsidecrypto.xyz/json-rpc"
@@ -77,7 +80,7 @@ def createQueryRun(sql):
     query_run_id = response_data['result']['queryRun']['id']
     return response_data, query_run_id
 
-@st.cache_data(ttl='1h')
+@st.cache_data(ttl='1m')
 def getQueryResults(query_run_id, attempts=10, delay=30):
     print('starting getQueryResults...')
     """Fetch query results with retries for asynchronous completion."""
@@ -101,7 +104,7 @@ def getQueryResults(query_run_id, attempts=10, delay=30):
             break  # Break on unexpected error
     return None  # Return None if data isn't ready after all attempts
 
-    
+  
 try:
     price_response_data, q_id_price = createQueryRun(lst_prices_query)
     if q_id_price:
@@ -115,7 +118,7 @@ try:
     else:
         print('Failed to create query run')
 except Exception as e:
-    print(f"Error in fetching price data: {e}")
+    print(f"Err or in fetching price data: {e}")
 
 @st.cache_data(ttl='30 days')
 def fetch_and_process_tbill_data(api_url, data_key, date_column, value_column, date_format='datetime'):
@@ -158,7 +161,25 @@ print('starting index...')
 @app.route('/')
 def index():
     print('starting index...')
+    return render_template('index.html')
+
+from flask import jsonify
+
+from flask import jsonify
+import plotly.io as pio
+
+from plotly.utils import PlotlyJSONEncoder
+import json
+
+@app.route('/latest-data')
+def latest_data():
     
+    global today, days_left, prices_df, three_month_tbill, current_risk_free
+    
+    # Ensure the latest date
+    today = dt.date.today()
+    days_left = last_date - today
+    print(f'fetching latest data as of {today}...')
 
     data_times = {
         "today": today,
@@ -170,17 +191,13 @@ def index():
     }
 
     data_df = pd.DataFrame([data_times])
-
     data_df.to_csv('data/data_times.csv')
 
     price_dataframe = prices_df
-
     price_dataframe.to_csv('data/flipside_price_data.csv')
     print('starting data processing...')
     price_timeseries = data_processing(price_dataframe)
     price_timeseries.to_csv('data/flipside_price_data_cleaned.csv')
-
-    
 
     all_assets = ['RETH', 'SFRXETH', 'WSTETH']
 
@@ -188,12 +205,7 @@ def index():
 
     start_date = str((price_timeseries['ds'].min()).strftime('%Y-%m-%d %H:%M:%S'))
     end_date = dt.datetime.now().strftime('%Y-%m-%d %H:00:00')
-
-
-
-
-    print(f"start date: {start_date}")
-    print(f"end date: {end_date}")
+    end_time_fix = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
 
     def run_sim(seed):
         app.logger.info('starting optimizer...')
@@ -273,9 +285,7 @@ def index():
         legend=dict(x=1.05, y=0.5),
         margin=dict(l=40, r=40, t=40, b=80)
     )
-    graph_html_1 = pyo.plot(fig1, output_type='div')
-
-    #graph_html = pyo.plot(fig, output_type='div')
+    graph_json_1 = json.dumps(fig1, cls=PlotlyJSONEncoder)
 
     normalized_data = normalize_asset_returns(price_timeseries, start_date=start_date, normalize_value=1)
     portfolio_values_df.set_index('Date', inplace=True)
@@ -300,9 +310,8 @@ def index():
     )
     
     fig2 = go.Figure(data=traces, layout=layout)
-    graph_html_2 = pyo.plot(fig2, output_type='div')
+    graph_json_2 = json.dumps(fig2, cls=PlotlyJSONEncoder)
 
-    #graph_html += pyo.plot(fig, output_type='div')
     comparison_end = portfolio_values_df.index.max()
     filtered_normalized = normalized_data[normalized_data.index <= comparison_end]
     comparison = filtered_normalized.merge(portfolio_values_df, left_index=True, right_index=True, how='inner')
@@ -321,21 +330,19 @@ def index():
     layout = go.Layout(
         title='Normalized Comparison to LSTs',
         xaxis=dict(title='Date'),
-        yaxis=dict(title='Va lue'),
+        yaxis=dict(title='Value'),
         legend=dict(x=0.1, y=0.9)
     )
     
     fig3 = go.Figure(data=traces, layout=layout)
-    graph_html_3 = pyo.plot(fig3, output_type='div')
-
-    #graph_html += pyo.plot(fig, output_type='div')
+    graph_json_3 = json.dumps(fig3, cls=PlotlyJSONEncoder)
 
     optimizer_cumulative_return = calculate_cumulative_return(portfolio_values_df)
     cumulative_reth = calculate_cumulative_return(filtered_normalized['normalized_RETH'].to_frame('Portfolio_Value'))
-    cumualtive_wsteth = calculate_cumulative_return(filtered_normalized['normalized_WSTETH'].to_frame('Portfolio_Value'))
+    cumulative_wsteth = calculate_cumulative_return(filtered_normalized['normalized_WSTETH'].to_frame('Portfolio_Value'))
     cumulative_sfrxeth = calculate_cumulative_return(filtered_normalized['normalized_SFRXETH'].to_frame('Portfolio_Value'))
     excess_return_reth = optimizer_cumulative_return - cumulative_reth
-    excess_return_wsteth = optimizer_cumulative_return - cumualtive_wsteth
+    excess_return_wsteth = optimizer_cumulative_return - cumulative_wsteth
     excess_return_sfrxeth = optimizer_cumulative_return - cumulative_sfrxeth
 
     app.logger.info(f"Excess Return over rETH:{excess_return_reth*100:.2f}%")
@@ -358,8 +365,8 @@ def index():
 
     app.logger.info(f'optimizer cagr: {optimizer_cagr*100:.2f}%, optimizer expected return: {optimizer_expected_return*100:.2f}%')
     app.logger.info(f'rETH cagr: {reth_cagr*100:.2f}%, rETH expected return: {reth_expected_return*100:.2f}%')
-    app.logger.info(f'wstETH cagr: {wsteth_cagr*100:.2f}%, rETH expected return: {wsteth_expected_return*100:.2f}%')
-    app.logger.info(f'sfrxETH cagr: {sfrxeth_cagr*100:.2f}%, rETH expected return: {sfrxeth_expected_return*100:.2f}%')
+    app.logger.info(f'wstETH cagr: {wsteth_cagr*100:.2f}%, wstETH expected return: {wsteth_expected_return*100:.2f}%')
+    app.logger.info(f'sfrxETH cagr: {sfrxeth_cagr*100:.2f}%, sfrxETH expected return: {sfrxeth_expected_return*100:.2f}%')
 
     results = {
         "start date": start_date,
@@ -370,40 +377,29 @@ def index():
         "wsteth latest value": f"{latest_wsteth_val:.5f}",
         "sfrxeth latest value": f"{latest_sfrxeth_val:.5f}",
         "optimizer cumulative return": f"{optimizer_cumulative_return*100:.2f}%",
-        "rEth cumulative return": f"{cumulative_reth*100:.2f}%",
-        "wstEth cumulative return": f"{cumualtive_wsteth*100:.2f}%",
-        "sfrxEth cumulative return": f"{cumulative_sfrxeth*100:.2f}%",
+        "rETH cumulative return": f"{cumulative_reth*100:.2f}%",
+        "wstETH cumulative return": f"{cumulative_wsteth*100:.2f}%",
+        "sfrxETH cumulative return": f"{cumulative_sfrxeth*100:.2f}%",
         "optimizer Excess Return over rETH": f"{excess_return_reth*100:.2f}%",
         "optimizer Excess Return over wstETH": f"{excess_return_wsteth*100:.2f}%",
         "optimizer Excess Return over sfrxETH": f"{excess_return_sfrxeth*100:.2f}%",
         "optimizer CAGR": f"{optimizer_cagr*100:.2f}%",
-        "rEth CAGR": f"{reth_cagr*100:.2f}%",
-        "wstEth CAGR": f"{wsteth_cagr*100:.2f}%",
-        "sfrxEth CAGR": f"{sfrxeth_cagr*100:.2f}%",
+        "rETH CAGR": f"{reth_cagr*100:.2f}%",
+        "wstETH CAGR": f"{wsteth_cagr*100:.2f}%",
+        "sfrxETH CAGR": f"{sfrxeth_cagr*100:.2f}%",
         "optimizer expected return": f"{optimizer_expected_return*100:.2f}%",
-        "rEth expected return": f"{reth_expected_return*100:.2f}%",
-        "wstEth expected return": f"{wsteth_expected_return*100:.2f}%",
-        "sfrxEth expected return": f"{sfrxeth_expected_return*100:.2f}%"
+        "rETH expected return": f"{reth_expected_return*100:.2f}%",
+        "wstETH expected return": f"{wsteth_expected_return*100:.2f}%",
+        "sfrxETH expected return": f"{sfrxeth_expected_return*100:.2f}%"
     }
 
-
     app.logger.info(f"results: {results}")
-    #graph_html_1 = pyo.plot(fig1, output_type='div')
-    #graph_html_2 = pyo.plot(fig2, output_type='div')
-    #graph_html_3 = pyo.plot(fig3, output_type='div')
-
-    graph_html = f"{graph_html_1}<br>{graph_html_2}<br>{graph_html_3}"
-
-
-
-
+    print(f"results: {results}")
     data_df = pd.DataFrame([results])
 
-    data_df.to_csv(f'data/flask_app_results.csv')
+    data_df.to_csv(f'data/app_results/flask_app_results{end_time_fix}.csv')
 
-
-
-    return render_template('index.html', graph_html_1=graph_html_1, graph_html_2 = graph_html_2, graph_html_3 = graph_html_3, results=results)
+    return jsonify({"results": results, "graph_1": graph_json_1, "graph_2": graph_json_2, "graph_3": graph_json_3})
 
 def fetch_data():
     global prices_df, three_month_tbill, current_risk_free
@@ -413,7 +409,6 @@ def fetch_data():
             price_df_json = getQueryResults(q_id_price)
             if price_df_json:
                 print('obtaining price json')
-                # Process and display the balance sheet data
                 prices_df = pd.DataFrame(price_df_json['result']['rows'])
             else:
                 print('Failed to get price results')
@@ -430,15 +425,22 @@ def fetch_data():
         print(f"Error in fetching tbill data: {e}")
 
     with app.app_context():
-        index()  # Call index() to update the displayed results
+        latest_data()  # Call index() to update the displayed results
 
-fetch_data()  # Initial fetch
+#fetch_data()  # Initial fetch
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(fetch_data, 'interval', hours=1)
-scheduler.start()
+#scheduler = BackgroundScheduler()
+#scheduler.add_job(fetch_data, 'interval', hours=1)
+#scheduler.start()
 
 if __name__ == "__main__":
+    fetch_data()  # Initial fetch
+
+    # Set up the scheduler
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(fetch_data, 'cron', minute=0)  # This will run the job at the start of every hour
+    scheduler.start()
+
     print('Starting Flask app...')
     app.run(debug=True, use_debugger=True, use_reloader=False)
     print('Flask app ending.')

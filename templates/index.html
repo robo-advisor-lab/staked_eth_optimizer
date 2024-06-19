@@ -63,62 +63,82 @@
 </head>
 <body>
     <h1>Liquid Staking Token Optimizer</h1>
-    <div class="graph-container">{{ graph_html_1|safe }}</div>
-    <div class="graph-container">{{ graph_html_2|safe }}</div>
-    <div class="graph-container">{{ graph_html_3|safe }}</div>
+    <div class="graph-container" id="graph_1"></div>
+    <div class="graph-container" id="graph_2"></div>
+    <div class="graph-container" id="graph_3"></div>
     <h2>Results</h2>
-    <div class="results-container">
-        <div class="results-column">
-            <h3>Dates</h3>
-            <ul>
-                <li>Start Date: {{ results['start date'] }}</li>
-                <li>Current Date: {{ results['current date'] }}</li>
-            </ul>
-        </div>
-        <div class="results-column">
-            <h3>Latest Portfolio Values</h3>
-            <ul>
-                <li>Optimizer: {{ results['optimizer latest portfolio value'] }}</li>
-                <li>rETH: {{ results['reth latest value'] }}</li>
-                <li>wstETH: {{ results['wsteth latest value'] }}</li>
-                <li>sfrxETH: {{ results['sfrxeth latest value'] }}</li>
-            </ul>
-        </div>
-        <div class="results-column">
-            <h3>Cumulative Returns</h3>
-            <ul>
-                <li>Optimizer: {{ results['optimizer cumulative return'] }}</li>
-                <li>rETH: {{ results['rEth cumulative return'] }}</li>
-                <li>wstETH: {{ results['wstEth cumulative return'] }}</li>
-                <li>sfrxETH: {{ results['sfrxEth cumulative return'] }}</li>
-            </ul>
-        </div>
-        <div class="results-column">
-            <h3>Excess Returns</h3>
-            <ul>
-                <li>Over rETH: {{ results['optimizer Excess Return over rETH'] }}</li>
-                <li>Over wstETH: {{ results['optimizer Excess Return over wstETH'] }}</li>
-                <li>Over sfrxETH: {{ results['optimizer Excess Return over sfrxETH'] }}</li>
-            </ul>
-        </div>
-        <div class="results-column">
-            <h3>CAGR</h3>
-            <ul>
-                <li>Optimizer: {{ results['optimizer CAGR'] }}</li>
-                <li>rETH: {{ results['rEth CAGR'] }}</li>
-                <li>wstETH: {{ results['wstEth CAGR'] }}</li>
-                <li>sfrxETH: {{ results['sfrxEth CAGR'] }}</li>
-            </ul>
-        </div>
-        <div class="results-column">
-            <h3>Expected Returns</h3>
-            <ul>
-                <li>Optimizer: {{ results['optimizer expected return'] }}</li>
-                <li>rETH: {{ results['rEth expected return'] }}</li>
-                <li>wstETH: {{ results['wstEth expected return'] }}</li>
-                <li>sfrxETH: {{ results['sfrxEth expected return'] }}</li>
-            </ul>
-        </div>
+    <div class="results-container" id="results-container">
     </div>
+    
+    <script>
+        function updatePage(data) {
+            // Update text
+            const resultsContainer = document.getElementById('results-container');
+            resultsContainer.innerHTML = '';
+
+            const sections = [
+                {title: 'Dates', items: [
+                    `Start Date: ${data.results['start date']}`,
+                    `Current Date: ${data.results['current date']}`
+                ]},
+                {title: 'Latest Portfolio Values', items: [
+                    `Optimizer: ${data.results['optimizer latest portfolio value']}`,
+                    `rETH: ${data.results['reth latest value']}`,
+                    `wstETH: ${data.results['wsteth latest value']}`,
+                    `sfrxETH: ${data.results['sfrxeth latest value']}`
+                ]},
+                {title: 'Cumulative Returns', items: [
+                    `Optimizer: ${data.results['optimizer cumulative return']}`,
+                    `rETH: ${data.results['rETH cumulative return']}`,
+                    `wstETH: ${data.results['wstETH cumulative return']}`,
+                    `sfrxETH: ${data.results['sfrxETH cumulative return']}`
+                ]},
+                {title: 'Excess Returns', items: [
+                    `Over rETH: ${data.results['optimizer Excess Return over rETH']}`,
+                    `Over wstETH: ${data.results['optimizer Excess Return over wstETH']}`,
+                    `Over sfrxETH: ${data.results['optimizer Excess Return over sfrxETH']}`
+                ]},
+                {title: 'CAGR', items: [
+                    `Optimizer: ${data.results['optimizer CAGR']}`,
+                    `rETH: ${data.results['rETH CAGR']}`,
+                    `wstETH: ${data.results['wstETH CAGR']}`,
+                    `sfrxETH: ${data.results['sfrxETH CAGR']}`
+                ]},
+                {title: 'Expected Returns', items: [
+                    `Optimizer: ${data.results['optimizer expected return']}`,
+                    `rETH: ${data.results['rETH expected return']}`,
+                    `wstETH: ${data.results['wstETH expected return']}`,
+                    `sfrxETH: ${data.results['sfrxETH expected return']}`
+                ]}
+            ];
+
+            sections.forEach(section => {
+                const column = document.createElement('div');
+                column.classList.add('results-column');
+                const title = document.createElement('h3');
+                title.textContent = section.title;
+                column.appendChild(title);
+
+                const list = document.createElement('ul');
+                section.items.forEach(item => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = item;
+                    list.appendChild(listItem);
+                });
+                column.appendChild(list);
+                resultsContainer.appendChild(column);
+            });
+
+            // Update graphs
+            Plotly.newPlot('graph_1', JSON.parse(data.graph_1).data, JSON.parse(data.graph_1).layout);
+            Plotly.newPlot('graph_2', JSON.parse(data.graph_2).data, JSON.parse(data.graph_2).layout);
+            Plotly.newPlot('graph_3', JSON.parse(data.graph_3).data, JSON.parse(data.graph_3).layout);
+        }
+
+        fetch('/latest-data')
+            .then(response => response.json())
+            .then(data => updatePage(data))
+            .catch(error => console.error('Error fetching data:', error));
+    </script>
 </body>
 </html>

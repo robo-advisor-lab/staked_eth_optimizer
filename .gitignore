@@ -1,3 +1,4 @@
 .ipynb_checkpoints/
 .streamlit/secrets.toml
 /cairo_lang
+.env

@@ -20,3 +20,15 @@ context.stroke()
 
 surface.write_to_png("output.png")
 print("Test image 'output.png' created successfully.")
+
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
+contract_address = os.getenv('CONTRACT_ADDRESS')
+private_key = os.getenv('PRIVATE_KEY')
+
+print(f'Contract Address: {contract_address}')
+print(f'Private Key: {private_key}')
