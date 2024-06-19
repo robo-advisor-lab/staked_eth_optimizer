@@ -1,0 +1,35 @@
+Metadata-Version: 2.1
+Name: flipside
+Version: 2.0.8
+Summary: SDK by Flipside Crypto: Query the most reliable & comprehensive blockchain data in crypto
+Home-page: https://github.com/FlipsideCrypto/sdk/python
+Author: dev@flipsidecrypto.com
+Author-email: dev@flipsidecrypto.com
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+Requires-Dist: pydantic (==1.10.9)
+Requires-Dist: requests (==2.29.0)
+
+# Python SDK for the Flipside API, by Flipside Crypto
+
+[![Python Continuous Testing](https://github.com/FlipsideCrypto/sdk/actions/workflows/ci_python.yml/badge.svg)](https://github.com/FlipsideCrypto/sdk/actions/workflows/ci_python.yml)
+
+The Python SDK, by Flipside Crypto gives you programmatic query access to the most reliable & comprehensive blockchain data sets in Web3, for free. More details on the SDK/API [here](https://docs.flipsidecrypto.com/flipside-api/get-started).
+
+## Get Started
+Get started by checking out the docs on our [Gitbook here](https://docs.flipsidecrypto.com/flipside-api/get-started/python):
+
+[📖 Official Docs](https://docs.flipsidecrypto.com/flipside-api/get-started/python)
+
+

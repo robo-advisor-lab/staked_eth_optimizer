@@ -1,0 +1,52 @@
+Metadata-Version: 2.1
+Name: crypto_cpp_py
+Version: 1.4.4
+Summary: This is a packaged crypto-cpp program
+Home-page: https://github.com/software-mansion-labs/crypto-cpp-py.git
+Author: Wojciech Szymczyk, Marcin Warchoł, Kamil Jankowski
+Author-email: wojciech.szymczyk@swmansion.com, marcin.warchol@swmansion.com, kamil.jankowski@swmansion.com
+Requires-Python: >=3.8
+Description-Content-Type: text/x-rst
+Requires-Dist: ecdsa ==0.18.0
+Requires-Dist: sympy ==1.11.1
+Requires-Dist: pywin32 ==306 ; os_name == "nt"
+Provides-Extra: build
+Requires-Dist: cmake >=3.22.4 ; extra == 'build'
+
+Crypto-cpp-py
+=============
+A python packaged `crypto-cpp <https://github.com/software-mansion-labs/crypto-cpp/tree/master>`_ library, that can be used for hashing and signing messages in starknet.
+
+
+Dependencies
+------------
+- ecdsa,
+- sympy,
+- pywin32 (Windows only),
+- cmake [optional, for building package from sdist; can be installed with `pip install crypto-cpp-py[build]`]
+
+|
+
+Changelog
+=========
+
+Version 1.4.4 (2024-01-30)
+--------------------------
+
+* Add support for Python 3.12
+
+Version 1.4.0 (2023-05-12)
+--------------------------
+
+* Add support for Windows
+
+Version 1.3.1 (2023-04-27)
+--------------------------
+
+* Add support for Python 3.11
+
+Version 1.3.0 (2023-04-20)
+--------------------------
+
+* Remove cairo-lang dependency
+* Require ecdsa, sympy

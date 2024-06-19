@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LST Optimizer</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f0f0f0;
+            color: #000;
+            margin: 0;
+            padding: 20px;
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
+            border-bottom: 2px solid #333;
+        }
+        h1 {
+            margin-top: 0;
+            padding-bottom: 10px;
+        }
+        h2 {
+            padding-top: 20px;
+            padding-bottom: 10px;
+        }
+        div.graph-container {
+            background-color: #fff;
+            padding: 20px;
+            border: 2px solid #000;
+            margin-bottom: 20px;
+        }
+        div.graph-container + div.graph-container {
+            margin-top: 20px;
+        }
+        .results-container {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        .results-column {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px;
+            background-color: #fff;
+            border: 2px solid #000;
+            margin: 10px;
+        }
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        li {
+            margin-bottom: 5px;
+        }
+        .result-item {
+            margin-bottom: 10px;
+        }
+    </style>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <h1>Liquid Staking Token Optimizer</h1>
+    <div class="graph-container">{{ graph_html_1|safe }}</div>
+    <div class="graph-container">{{ graph_html_2|safe }}</div>
+    <div class="graph-container">{{ graph_html_3|safe }}</div>
+    <h2>Results</h2>
+    <div class="results-container">
+        <div class="results-column">
+            <h3>Dates</h3>
+            <ul>
+                <li>Start Date: {{ results['start date'] }}</li>
+                <li>Current Date: {{ results['current date'] }}</li>
+            </ul>
+        </div>
+        <div class="results-column">
+            <h3>Latest Portfolio Values</h3>
+            <ul>
+                <li>Optimizer: {{ results['optimizer latest portfolio value'] }}</li>
+                <li>rETH: {{ results['reth latest value'] }}</li>
+                <li>wstETH: {{ results['wsteth latest value'] }}</li>
+                <li>sfrxETH: {{ results['sfrxeth latest value'] }}</li>
+            </ul>
+        </div>
+        <div class="results-column">
+            <h3>Cumulative Returns</h3>
+            <ul>
+                <li>Optimizer: {{ results['optimizer cumulative return'] }}</li>
+                <li>rETH: {{ results['rEth cumulative return'] }}</li>
+                <li>wstETH: {{ results['wstEth cumulative return'] }}</li>
+                <li>sfrxETH: {{ results['sfrxEth cumulative return'] }}</li>
+            </ul>
+        </div>
+        <div class="results-column">
+            <h3>Excess Returns</h3>
+            <ul>
+                <li>Over rETH: {{ results['optimizer Excess Return over rETH'] }}</li>
+                <li>Over wstETH: {{ results['optimizer Excess Return over wstETH'] }}</li>
+                <li>Over sfrxETH: {{ results['optimizer Excess Return over sfrxETH'] }}</li>
+            </ul>
+        </div>
+        <div class="results-column">
+            <h3>CAGR</h3>
+            <ul>
+                <li>Optimizer: {{ results['optimizer CAGR'] }}</li>
+                <li>rETH: {{ results['rEth CAGR'] }}</li>
+                <li>wstETH: {{ results['wstEth CAGR'] }}</li>
+                <li>sfrxETH: {{ results['sfrxEth CAGR'] }}</li>
+            </ul>
+        </div>
+        <div class="results-column">
+            <h3>Expected Returns</h3>
+            <ul>
+                <li>Optimizer: {{ results['optimizer expected return'] }}</li>
+                <li>rETH: {{ results['rEth expected return'] }}</li>
+                <li>wstETH: {{ results['wstEth expected return'] }}</li>
+                <li>sfrxETH: {{ results['sfrxEth expected return'] }}</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

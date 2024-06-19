@@ -19,7 +19,6 @@ from sympy.physics.quantum.matrixutils import (numpy_ndarray,
 from sympy.physics.quantum.cartesian import XKet, XOp, XBra
 from sympy.physics.quantum.qapply import qapply
 from sympy.physics.quantum.operatorset import operators_to_state
-from sympy.testing.pytest import raises
 
 Amat = Matrix([[1, I], [-I, 1]])
 Bmat = Matrix([[1, 2], [3, 4]])
@@ -170,7 +169,11 @@ x_op = XOp('X')
 def test_innerprod_represent():
     assert rep_innerproduct(x_ket) == InnerProduct(XBra("x_1"), x_ket).doit()
     assert rep_innerproduct(x_bra) == InnerProduct(x_bra, XKet("x_1")).doit()
-    raises(TypeError, lambda: rep_innerproduct(x_op))
+
+    try:
+        rep_innerproduct(x_op)
+    except TypeError:
+        return True
 
 
 def test_operator_represent():

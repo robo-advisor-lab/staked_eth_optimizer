@@ -22,3 +22,14 @@ holidays
 setuptools-git
 ephem
 fbprophet
+flipside
+plotly
+matplotlib
+pandas
+numpy
+streamlit
+requests
+flask
+apscheduler
+pycairo
+starknet.py
