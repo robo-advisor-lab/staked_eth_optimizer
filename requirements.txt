@@ -33,3 +33,4 @@ flask
 apscheduler
 pycairo
 starknet.py
+pyngrok

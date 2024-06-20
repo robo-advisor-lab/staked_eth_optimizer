@@ -54,7 +54,7 @@ lst_prices_query = sql(today)
 
 api_key = st.secrets["api_key"]
 
-@st.cache_data(ttl='1m')
+@st.cache_data(ttl='15m')
 def createQueryRun(sql):
     print('starting createQueryRun...')
     url = "https://api-v2.flipsidecrypto.xyz/json-rpc"
@@ -80,7 +80,7 @@ def createQueryRun(sql):
     query_run_id = response_data['result']['queryRun']['id']
     return response_data, query_run_id
 
-@st.cache_data(ttl='1m')
+@st.cache_data(ttl='15m')
 def getQueryResults(query_run_id, attempts=10, delay=30):
     print('starting getQueryResults...')
     """Fetch query results with retries for asynchronous completion."""
@@ -105,20 +105,7 @@ def getQueryResults(query_run_id, attempts=10, delay=30):
     return None  # Return None if data isn't ready after all attempts
 
   
-try:
-    price_response_data, q_id_price = createQueryRun(lst_prices_query)
-    if q_id_price:
-        price_df_json = getQueryResults(q_id_price)
-        if price_df_json:
-            print('obtaining price json')
-            # Process and display the balance sheet data
-            prices_df = pd.DataFrame(price_df_json['result']['rows'])
-        else:
-            print('Failed to get price results')
-    else:
-        print('Failed to create query run')
-except Exception as e:
-    print(f"Err or in fetching price data: {e}")
+
 
 @st.cache_data(ttl='30 days')
 def fetch_and_process_tbill_data(api_url, data_key, date_column, value_column, date_format='datetime'):
@@ -146,12 +133,7 @@ def fetch_and_process_tbill_data(api_url, data_key, date_column, value_column, d
     
 three_month_tbill_historical_api = "https://api.stlouisfed.org/fred/series/observations?series_id=TB3MS&file_type=json"
     
-try:
-    three_month_tbill = fetch_and_process_tbill_data(three_month_tbill_historical_api, "observations", "date", "value")
-    three_month_tbill['decimal'] = three_month_tbill['value'] / 100
-    current_risk_free = three_month_tbill['decimal'].iloc[-1]
-except Exception as e:
-    print(f"Error in fetching tbill data: {e}")
+
 
 
 
@@ -181,6 +163,26 @@ def latest_data():
     days_left = last_date - today
     print(f'fetching latest data as of {today}...')
 
+    try:
+        price_response_data, q_id_price = createQueryRun(lst_prices_query)
+        if q_id_price:
+            price_df_json = getQueryResults(q_id_price)
+            if price_df_json:
+                prices_df = pd.DataFrame(price_df_json['result']['rows'])
+            else:
+                print('Failed to get price results')
+        else:
+            print('Failed to create query run')
+    except Exception as e:
+        print(f"Error in fetching price data: {e}")
+
+    try:
+        three_month_tbill = fetch_and_process_tbill_data(three_month_tbill_historical_api, "observations", "date", "value")
+        three_month_tbill['decimal'] = three_month_tbill['value'] / 100
+        current_risk_free = three_month_tbill['decimal'].iloc[-1]
+    except Exception as e:
+        print(f"Error in fetching tbill data: {e}")
+
     data_times = {
         "today": today,
         "days start": days_start_dev,
@@ -197,6 +199,8 @@ def latest_data():
     price_dataframe.to_csv('data/flipside_price_data.csv')
     print('starting data processing...')
     price_timeseries = data_processing(price_dataframe)
+    #latest_lst_prices = price_timeseries.tail()
+    #latest_lst_prices.to_csv('data/app_lst_prices')
     price_timeseries.to_csv('data/flipside_price_data_cleaned.csv')
 
     all_assets = ['RETH', 'SFRXETH', 'WSTETH']
@@ -401,31 +405,31 @@ def latest_data():
 
     return jsonify({"results": results, "graph_1": graph_json_1, "graph_2": graph_json_2, "graph_3": graph_json_3})
 
-def fetch_data():
-    global prices_df, three_month_tbill, current_risk_free
-    try:
-        price_response_data, q_id_price = createQueryRun(lst_prices_query)
-        if q_id_price:
-            price_df_json = getQueryResults(q_id_price)
-            if price_df_json:
-                print('obtaining price json')
-                prices_df = pd.DataFrame(price_df_json['result']['rows'])
-            else:
-                print('Failed to get price results')
-        else:
-            print('Failed to create query run')
-    except Exception as e:
-        print(f"Error in fetching price data: {e}")
+# def fetch_data():
+#     global prices_df, three_month_tbill, current_risk_free
+#     try:
+#         price_response_data, q_id_price = createQueryRun(lst_prices_query)
+#         if q_id_price:
+#             price_df_json = getQueryResults(q_id_price)
+#             if price_df_json:
+#                 print('obtaining price json')
+#                 prices_df = pd.DataFrame(price_df_json['result']['rows'])
+#             else:
+#                 print('Failed to get price results')
+#         else:
+#             print('Failed to create query run')
+#     except Exception as e:
+#         print(f"Error in fetching price data: {e}")
 
-    try:
-        three_month_tbill = fetch_and_process_tbill_data(three_month_tbill_historical_api, "observations", "date", "value")
-        three_month_tbill['decimal'] = three_month_tbill['value'] / 100
-        current_risk_free = three_month_tbill['decimal'].iloc[-1]
-    except Exception as e:
-        print(f"Error in fetching tbill data: {e}")
+#     try:
+#         three_month_tbill = fetch_and_process_tbill_data(three_month_tbill_historical_api, "observations", "date", "value")
+#         three_month_tbill['decimal'] = three_month_tbill['value'] / 100
+#         current_risk_free = three_month_tbill['decimal'].iloc[-1]
+#     except Exception as e:
+#         print(f"Error in fetching tbill data: {e}")
 
-    with app.app_context():
-        latest_data()  # Call index() to update the displayed results
+#     with app.app_context():
+#         latest_data()  # Call index() to update the displayed results
 
 #fetch_data()  # Initial fetch
 
@@ -434,12 +438,13 @@ def fetch_data():
 #scheduler.start()
 
 if __name__ == "__main__":
-    fetch_data()  # Initial fetch
+    with app.app_context():
+        latest_data()
 
-    # Set up the scheduler
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(fetch_data, 'cron', minute=0)  # This will run the job at the start of every hour
-    scheduler.start()
+    # # Set up the scheduler
+    # scheduler = BackgroundScheduler()
+    # scheduler.add_job(func=latest_data, trigger='cron', minute=0)  # This will run the job at the start of every hour
+    # scheduler.start()
 
     print('Starting Flask app...')
     app.run(debug=True, use_debugger=True, use_reloader=False)
