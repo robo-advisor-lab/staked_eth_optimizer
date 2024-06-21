@@ -78,7 +78,7 @@ load_dotenv()
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 #print(f'private key{PRIVATE_KEY}')
 ACCOUNT_ADDRESS = os.getenv('ACCOUNT_ADDRESS')
-#CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS')
+CONTRACT_ADDRESS = "0x050b4c23b0181bc0d610a392fd589b16b91a6c0d2c21622c81d1467082c9da52"
 GATEWAY_URL = "https://starknet-sepolia.public.blastapi.io"
 
 if not PRIVATE_KEY or not ACCOUNT_ADDRESS:
@@ -108,6 +108,51 @@ async def get_balance():
     return eth_balance
 
 asyncio.run(get_balance())
+
+async def get_contract():
+    return await Contract.from_address(contract_address=CONTRACT_ADDRESS, provider=client)
+
+@app.route('/update-balances', methods=['POST'])
+def update_balances():
+    data = request.json
+    print(f"Received Prices: wsteth_price={data['wsteth_price']}, reth_price={data['reth_price']}, sfrxeth_price={data['sfrxeth_price']}, eth_price={data['eth_price']}")
+    wsteth_price = data['wsteth_price']
+    reth_price = data['reth_price']
+    sfrxeth_price = data['sfrxeth_price']
+    eth_price = data['eth_price']
+    
+    async def update():
+        contract = await get_contract()
+        print(f"Contract: {contract}")
+        call = contract.functions['update_balances'].prepare(
+            wsteth_price,
+            reth_price,
+            sfrxeth_price,
+            eth_price
+        )
+        print(f"Call: {call}")
+        await account.execute(call)
+        print("Balances updated successfully.")
+        return "Balances updated"
+    
+    return jsonify(asyncio.run(update()))
+
+
+@app.route('/get-balances', methods=['GET'])
+def get_balances():
+    async def get_all_balances():
+        contract = await get_contract()
+        balances = await contract.functions['get_all_balances'].call()
+        print(f"Balances: {balances}")
+        return {
+            "wsteth_balance": balances[0],
+            "reth_balance": balances[1],
+            "sfrxeth_balance": balances[2],
+            "eth_balance": balances[3]
+        }
+
+    return jsonify(asyncio.run(get_all_balances()))
+
 
 # def bal_to_usd(balance):
 #     apply price df to onchain balance for each key pair in balance dictionary, 
@@ -505,4 +550,6 @@ if __name__ == "__main__":
     print('Starting Flask app...')
     app.run(debug=True, use_debugger=True, use_reloader=False)
     print('Flask app ending.')
+
+    
 
