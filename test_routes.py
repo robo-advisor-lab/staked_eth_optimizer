@@ -93,7 +93,7 @@ async def rebalance_fund_account(prices, current_balances, new_compositions):
             # Buy tokens: Transfer tokens from the account to the fund account
             await transfer_tokens_to_fund(token, difference)
         elif difference < 0:
-            print(f"Selling {difference} of {token}")
+            print(f"Selling {-difference} of {token}")
             # Sell tokens: Transfer tokens from the fund account to the account
             await transfer_tokens_from_fund(token, -difference)
     
