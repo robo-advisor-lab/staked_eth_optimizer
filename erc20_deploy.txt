@@ -1,0 +1,2 @@
+starkli declare target/dev/<contract>.contract_class.json --rpc https://starknet-sepolia.public.blastapi.io --account account0_account.json --keystore account0_keystore.json
+starkli deploy <class hash> --rpc https://starknet-sepolia.public.blastapi.io --account account0_account.json --keystore account0_keystore.json 0 0x0de0b6b3a7640000 0x065b5B31C70D0EdFEe8Fd80797b58a9bAd78b009966389722d70C44a5c31b0a2

@@ -102,12 +102,25 @@ async def get_balance():
     eth_balance = balance_wei / 10**18
     #steth_address = address for deployed test net token
     #steth_balance = await account.get_balance(steth_address)
-    #balance = {"ETH":eth_balance, "stETH": steth_blance, ...}
+    # return balance = {"ETH":eth_balance, "stETH": steth_balance, ...}
     #balance to pd to apply price feeds to them from price_df?
     print(f"ETH Balance for account {ACCOUNT_ADDRESS}: {eth_balance}")
     return eth_balance
 
 asyncio.run(get_balance())
+
+# def bal_to_usd(balance):
+#     apply price df to onchain balance for each key pair in balance dictionary, 
+#     return the usd value of the tokens
+
+# async def rebalance_portfolio(new_compositions):
+#     contract = await Contract.from_address(CONTRACT_ADDRESS, client)
+#     call = contract.functions['rebalance'].prepare(
+#         new_compositions['wsteth'],
+#         new_compositions['reth'],
+#         new_compositions['sfrxeth']
+#     )
+#     await account.execute(call)
 
 
 days_start_dev = pd.to_datetime('2024-06-17 01:00:00')
@@ -191,6 +204,13 @@ three_month_tbill_historical_api = "https://api.stlouisfed.org/fred/series/obser
 @app.route('/')
 def index():
     return render_template('index.html', version=deployment_version)
+
+# @app.route('/rebalance', methods=['POST'])
+# def rebalance():
+#     new_compositions = request.json
+#     asyncio.run(rebalance_portfolio(new_compositions))
+#     return jsonify({"status": "rebalanced"})
+ 
 
 cached_data = None
 
