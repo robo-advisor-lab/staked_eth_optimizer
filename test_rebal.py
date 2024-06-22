@@ -4,34 +4,20 @@ import json
 # URL for the Flask application
 url = 'http://127.0.0.1:5001'
 
-# Data to be sent to the /rebalance endpoint
-rebalance_data = {
-    'prices': {
-        'wsteth_price': 10,
-        'reth_price': 20,
-        'sfrxeth_price': 30,
-        'eth_price': 40
-    },
-    'new_compositions': {
-        'wsteth': 0.3,
-        'reth': 0.3,
-        'sfrxeth': 0.2,
-        'eth': 0.2
-    }
+# Replace with an actual recipient address
+valid_recipient_address = '0x05ACcd31c28E14E9f9Da38e7407Ae1958344179CfBf48b6b1795c9965d464e45'
+
+# Data to be sent to the /swap-eth endpoint
+swap_data = {
+    'recipient_address': valid_recipient_address,
+    'amount': '10000000000000000'  # Amount in wei (0.01 ETH in this example)
 }
 
-# Send POST request to /rebalance
-response = requests.post(f'{url}/rebalance', json=rebalance_data)
-print("Rebalance Response:")
-try:
-    print(response.json())
-except requests.exceptions.JSONDecodeError as e:
-    print("Failed to decode JSON response:", e)
-    print("Response text:", response.text)
+print("Sending swap request with data:", swap_data)
 
-# To test the current balances endpoint
-response = requests.get(f'{url}/get-balances')
-print("Current Balances Response:")
+# Send POST request to /swap-eth
+response = requests.post(f'{url}/swap-eth', json=swap_data)
+print("Swap ETH Response:")
 try:
     print(response.json())
 except requests.exceptions.JSONDecodeError as e:
