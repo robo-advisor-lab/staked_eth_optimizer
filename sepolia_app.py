@@ -20,7 +20,10 @@ from pyngrok import ngrok, conf, installer
 import ssl
 import urllib.request
 import certifi
+import yfinance as yf
+import aiohttp
 
+import traceback
 
 import streamlit as st
 
@@ -31,13 +34,20 @@ import plotly.colors as pc
 from datetime import timedelta
 from scripts.utils import set_random_seed, normalize_asset_returns, calculate_cumulative_return, calculate_cagr
 from scripts.testnet_model import StakedETHEnv
-from scripts.sql_scripts import sql
+from scripts.sql_scripts import sql, eth_price
 from scripts.processing_function import data_processing
 from flipside import Flipside
 import requests
 import warnings
 import matplotlib.pyplot as plt
 import time
+from starknet_py.net.client_models import Call
+from starknet_py.hash.selector import get_selector_from_name
+
+eth = yf.Ticker('ETH-USD')
+eth_from_nov = eth.history(period='6mo')
+#print('eth', eth_from_nov)
+#eth_from_nov.set_index('Date', inplace=True)
 
 # Create a default SSL context that bypasses certificate verification
 context = ssl.create_default_context()
@@ -76,10 +86,14 @@ print(f"Current working directory: {os.getcwd()}")
 load_dotenv()
 
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
-#print(f'private key{PRIVATE_KEY}')
 ACCOUNT_ADDRESS = os.getenv('ACCOUNT_ADDRESS')
-CONTRACT_ADDRESS = "0x050b4c23b0181bc0d610a392fd589b16b91a6c0d2c21622c81d1467082c9da52"
-GATEWAY_URL = "https://starknet-sepolia.public.blastapi.io"
+FUND_ACCOUNT_ADDRESS = os.getenv('FUND_ACCOUNT_ADDRESS')
+#CONTRACT_ADDRESS = "0x050b4c23b0181bc0d610a392fd589b16b91a6c0d2c21622c81d1467082c9da52"
+WSTETH_CONTRACT_ADDRESS = os.getenv('WSTETH_CONTRACT_ADDRESS')
+RETH_CONTRACT_ADDRESS = os.getenv('RETH_CONTRACT_ADDRESS')
+SFRXETH_CONTRACT_ADDRESS = os.getenv('SFRXETH_CONTRACT_ADDRESS')
+ETH_CONTRACT_ADDRESS = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
+GATEWAY_URL = "https://starknet-sepolia.infura.io/v3/22b286f565734e3e80221a4212adc370"
 
 if not PRIVATE_KEY or not ACCOUNT_ADDRESS:
     raise EnvironmentError("One or more environment variables (PRIVATE_KEY, ACCOUNT_ADDRESS) are not set.")
@@ -97,61 +111,194 @@ account = Account(client=client, address=ACCOUNT_ADDRESS, signer=signer, chain=S
 print(f"Connected to Starknet testnet with account: {ACCOUNT_ADDRESS}, chain: {StarknetChainId.SEPOLIA}")
 
 async def get_balance():
-    # Query the account balance
-    balance_wei = await account.get_balance()
-    eth_balance = balance_wei / 10**18
-    #steth_address = address for deployed test net token
-    #steth_balance = await account.get_balance(steth_address)
-    # return balance = {"ETH":eth_balance, "stETH": steth_balance, ...}
-    #balance to pd to apply price feeds to them from price_df?
-    print(f"ETH Balance for account {ACCOUNT_ADDRESS}: {eth_balance}")
-    return eth_balance
+    eth_balance_wei = await account.get_balance()
+    eth_balance = eth_balance_wei / 10**18
+
+    # Assuming you have contract addresses for wstETH, rETH, sfrxETH
+    wsteth_contract_address = "0x06dfe188e38410d4ce365878f382350f0b7bc2e57b76e628be72cad53fdb513f"
+    reth_contract_address = "0x04591439d400e05427afeecde03edd4ebb7832c021ff4fb99d1bd0548e1ac273"
+    sfrxeth_contract_address = "0x057062a3ff153d69bda01570e7224f4366cd3d9a8ac26691bdec654bf490fa4c"
+
+    wsteth_balance_wei = await account.get_balance(wsteth_contract_address)
+    reth_balance_wei = await account.get_balance(reth_contract_address)
+    sfrxeth_balance_wei = await account.get_balance(sfrxeth_contract_address)
+
+    wsteth_balance = wsteth_balance_wei / 10**18
+    reth_balance = reth_balance_wei / 10**18
+    sfrxeth_balance = sfrxeth_balance_wei / 10**18
+
+    balances = {
+        "eth": eth_balance,
+        "wsteth": wsteth_balance,
+        "reth": reth_balance,
+        "sfrxeth": sfrxeth_balance
+    }
+
+    print(f"Balances for account {ACCOUNT_ADDRESS}: {balances}")
+    return balances
+
+async def get_lst_balance():
+    # Assuming you have contract addresses for wstETH, rETH, sfrxETH
+    wsteth_contract_address = "0x06dfe188e38410d4ce365878f382350f0b7bc2e57b76e628be72cad53fdb513f"
+    reth_contract_address = "0x04591439d400e05427afeecde03edd4ebb7832c021ff4fb99d1bd0548e1ac273"
+    sfrxeth_contract_address = "0x057062a3ff153d69bda01570e7224f4366cd3d9a8ac26691bdec654bf490fa4c"
+
+    wsteth_balance_wei = await account.get_balance(wsteth_contract_address)
+    reth_balance_wei = await account.get_balance(reth_contract_address)
+    sfrxeth_balance_wei = await account.get_balance(sfrxeth_contract_address)
+
+    wsteth_balance = wsteth_balance_wei / 10**18
+    reth_balance = reth_balance_wei / 10**18
+    sfrxeth_balance = sfrxeth_balance_wei / 10**18
+
+    eth_balance_wei = await account.get_balance()
+    eth_balance = eth_balance_wei / 10**18
+
+    return wsteth_balance, reth_balance, sfrxeth_balance, eth_balance
+
+
 
 asyncio.run(get_balance())
+asyncio.run(get_lst_balance())
 
-async def get_contract():
-    return await Contract.from_address(contract_address=CONTRACT_ADDRESS, provider=client)
+async def transfer_tokens_from_fund(token, amount):
+    print(f'starting transfer from fund account function...')
+    print(f'transfer from fund token: {token}')
+    print(f'transfer from fund amt: {amount}')
+    contract_address = get_contract_address(token)
+    selector = get_selector_from_name("transfer")
+    amount_int = int(amount * 10**18)  # Convert amount to the correct decimal format
+    amount_low = amount_int & ((1 << 128) - 1)
+    amount_high = amount_int >> 128
+    call = Call(
+        to_addr=int(contract_address, 16),
+        selector=selector,
+        calldata=[int(FUND_ACCOUNT_ADDRESS, 16), amount_low, amount_high]
+    )
+    print(f'contract address: {contract_address}, selector: {selector}, call: {call}')
+    try:
+        response = await account.execute_v1(calls=call, max_fee=int(1e16))
+        await account.client.wait_for_tx(response.transaction_hash)
+        print(f"Transferred {amount} of {token} from account to {FUND_ACCOUNT_ADDRESS}")
+    except Exception as e:
+        print(f"Error transferring tokens from fund: {e}")
+        traceback.print_exc()
 
-@app.route('/update-balances', methods=['POST'])
-def update_balances():
+async def send_balances_to_fund(balances): #need to pass through initial amounts?
+    print(f'starting send back balance function...')
+    #balances = await get_balance()
+    print(f'send back balances: {balances}')
+    for token, amount in balances.items():
+        if token != "eth":  # Assuming we don't transfer ETH, but the other tokens
+            print(f'token: {token}, amount:{amount}')
+            await transfer_tokens_from_fund(token, amount)
+            print(f'Sent {token}, {amount} to fund')
+
+
+@app.route('/send-balances-to-fund', methods=['POST'])
+def send_balances_to_fund_endpoint():
+    print('starting send back')
     data = request.json
-    print(f"Received Prices: wsteth_price={data['wsteth_price']}, reth_price={data['reth_price']}, sfrxeth_price={data['sfrxeth_price']}, eth_price={data['eth_price']}")
-    wsteth_price = data['wsteth_price']
-    reth_price = data['reth_price']
-    sfrxeth_price = data['sfrxeth_price']
-    eth_price = data['eth_price']
+    initial_holdings = data['initial_holdings']
+    print(f'rebalance initial holdings {initial_holdings}')
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(send_balances_to_fund(initial_holdings))
+    loop.close()
+    return jsonify({"status": "success"})
+
+async def send_rebalance_request(recipient_address, prices, new_compositions, initial_holdings):
+    url = 'http://127.0.0.1:5001/rebalance'  # URL to the rebalance endpoint
+    rebalance_data = {
+        'prices': prices,
+        'new_compositions': new_compositions,
+        'initial_holdings': initial_holdings,
+        'recipient_address': recipient_address
+    }
+
+    # Use aiohttp to send an asynchronous post request
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=rebalance_data) as response:
+            print("Rebalance Response:")
+            try:
+                response_data = await response.json()
+                print(response_data)
+            except aiohttp.ClientError as e:
+                print("Failed to decode JSON response:", e)
+    await send_balances_to_fund(initial_holdings)
+
+
+async def async_trigger_rebalance(data):
+    recipient_address = data['recipient_address']
+    prices = data['prices']
+    new_compositions = data['new_compositions']
+    initial_holdings = data['initial_holdings']
+    await send_balances_to_fund()
+    send_rebalance_request(recipient_address, prices, new_compositions, initial_holdings)
+
+@app.route('/trigger-rebalance', methods=['POST'])
+def trigger_rebalance():
+    data = request.json
+    asyncio.run(async_trigger_rebalance(data))
+    return jsonify({"status": "Rebalance request sent"})
+
+
+def get_contract_address(token):
+    print(f'starting get contract address function...')
+    if token == 'wsteth':
+        return WSTETH_CONTRACT_ADDRESS
+    elif token == 'reth':
+        return RETH_CONTRACT_ADDRESS
+    elif token == 'sfrxeth':
+        return SFRXETH_CONTRACT_ADDRESS
+    elif token == 'eth':
+        return ETH_CONTRACT_ADDRESS
+    else:
+        raise ValueError("Unknown token")
+
+# async def get_contract():
+#     return await Contract.from_address(contract_address=CONTRACT_ADDRESS, provider=client)
+
+# @app.route('/update-balances', methods=['POST'])
+# def update_balances():
+#     data = request.json
+#     print(f"Received Prices: wsteth_price={data['wsteth_price']}, reth_price={data['reth_price']}, sfrxeth_price={data['sfrxeth_price']}, eth_price={data['eth_price']}")
+#     wsteth_price = data['wsteth_price']
+#     reth_price = data['reth_price']
+#     sfrxeth_price = data['sfrxeth_price']
+#     eth_price = data['eth_price']
     
-    async def update():
-        contract = await get_contract()
-        print(f"Contract: {contract}")
-        call = contract.functions['update_balances'].prepare(
-            wsteth_price,
-            reth_price,
-            sfrxeth_price,
-            eth_price
-        )
-        print(f"Call: {call}")
-        await account.execute(call)
-        print("Balances updated successfully.")
-        return "Balances updated"
+#     async def update():
+#         contract = await get_contract()
+#         print(f"Contract: {contract}")
+#         call = contract.functions['update_balances'].prepare(
+#             wsteth_price,
+#             reth_price,
+#             sfrxeth_price,
+#             eth_price
+#         )
+#         print(f"Call: {call}")
+#         await account.execute(call)
+#         print("Balances updated successfully.")
+#         return "Balances updated"
     
-    return jsonify(asyncio.run(update()))
+#     return jsonify(asyncio.run(update()))
 
 
-@app.route('/get-balances', methods=['GET'])
-def get_balances():
-    async def get_all_balances():
-        contract = await get_contract()
-        balances = await contract.functions['get_all_balances'].call()
-        print(f"Balances: {balances}")
-        return {
-            "wsteth_balance": balances[0],
-            "reth_balance": balances[1],
-            "sfrxeth_balance": balances[2],
-            "eth_balance": balances[3]
-        }
+# @app.route('/get-balances', methods=['GET'])
+# def get_balances():
+#     async def get_all_balances():
+#         contract = await get_contract()
+#         balances = await contract.functions['get_all_balances'].call()
+#         print(f"Balances: {balances}")
+#         return {
+#             "wsteth_balance": balances[0],
+#             "reth_balance": balances[1],
+#             "sfrxeth_balance": balances[2],
+#             "eth_balance": balances[3]
+#         }
 
-    return jsonify(asyncio.run(get_all_balances()))
+#     return jsonify(asyncio.run(get_all_balances()))
 
 
 # def bal_to_usd(balance):
@@ -250,11 +397,11 @@ three_month_tbill_historical_api = "https://api.stlouisfed.org/fred/series/obser
 def index():
     return render_template('index.html', version=deployment_version)
 
-# @app.route('/rebalance', methods=['POST'])
-# def rebalance():
-#     new_compositions = request.json
-#     asyncio.run(rebalance_portfolio(new_compositions))
-#     return jsonify({"status": "rebalanced"})
+@app.route('/rebalance', methods=['POST'])
+def rebalance():
+    new_compositions = request.json
+    asyncio.run(trigger_rebalance(new_compositions))
+    return jsonify({"status": "rebalanced"})
  
 
 cached_data = None
@@ -268,10 +415,8 @@ def latest_data():
     print('cached data:', cached_data)
     today = dt.date.today()
     days_left = last_date - today
-    balance = asyncio.run(get_balance())
-    #data_version = dt.datetime.now().strftime('%Y%m%d%H%M%S')
+    balances = asyncio.run(get_balance())
     data_version = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
-
 
     if cached_data is not None:
         print("Cached Data:", cached_data)
@@ -321,6 +466,7 @@ def latest_data():
     data_df.to_csv('data/data_times.csv')
 
     price_dataframe = prices_df
+    print('price dataframe', price_dataframe)
     price_timeseries = data_processing(price_dataframe)
 
     all_assets = ['RETH', 'SFRXETH', 'WSTETH']
@@ -368,15 +514,64 @@ def latest_data():
         portfolio_values_df = env.get_portfolio_values_df()
         compositions_df = env.get_compositions_df()
 
-        new_compositions = compositions_df.iloc[-1].to_dict()
-        print(f'new compositions: {new_compositions}')
-        #asyncio.run(rebalance_portfolio(new_compositions))
-        
-        return states_df, rewards_df, actions_df, portfolio_values_df, compositions_df
+        new_compositions = {
+            "wsteth": float(compositions_df.iloc[-1]["WSTETH_weight"]),
+            "reth": float(compositions_df.iloc[-1]["RETH_weight"]),
+            "sfrxeth": float(compositions_df.iloc[-1]["SFRXETH_weight"]),
+            "eth": float(1.0 - (compositions_df.iloc[-1]["WSTETH_weight"] + compositions_df.iloc[-1]["RETH_weight"] + compositions_df.iloc[-1]["SFRXETH_weight"]))
+        }
 
+        print(f'new compositions: {new_compositions}')
+        
+        prices = {
+            'wsteth_price': float(price_timeseries['WSTETH'].to_frame('WSTETH Price').iloc[-1].values[0]),
+            'reth_price': float(price_timeseries['RETH'].to_frame('RETH Price').iloc[-1].values[0]),
+            'sfrxeth_price': float(price_timeseries['SFRXETH'].to_frame('SFRXETH Price').iloc[-1].values[0]),
+            'eth_price': float(eth_from_nov['Close'].to_frame('ETH Price').iloc[-1].values[0])
+        }
+        initial_holdings = {
+            'wsteth': float(balances['wsteth']),
+            'reth': float(balances['reth']),
+            'sfrxeth': float(balances['sfrxeth']),
+            'eth': float(balances['eth'])
+        }
+
+        
+
+        wsteth_bal = balances['wsteth'] * float(price_timeseries['WSTETH'].to_frame('WSTETH Price').iloc[-1].values[0])
+        reth_bal = balances['reth'] * float(price_timeseries['RETH'].to_frame('RETH Price').iloc[-1].values[0])
+        sfrxeth_bal = balances['sfrxeth'] * float(price_timeseries['SFRXETH'].to_frame('SFRXETH Price').iloc[-1].values[0])
+
+        portfolio_balance = wsteth_bal + sfrxeth_bal + reth_bal
+
+        rebal_info = {
+
+            "new compositions": new_compositions,
+            "prices": prices,
+            "initial holdings": initial_holdings,
+            "account address": ACCOUNT_ADDRESS,
+            "wsteth bal usd": wsteth_bal,
+            "reth bal usd": reth_bal,
+            "sfrxeth bal usd": sfrxeth_bal,
+            "portfolio balance": portfolio_balance
+        }
+
+        rebal_df = pd.DataFrame([rebal_info])
+        rebal_df.to_csv(f'data/rebal_results{end_time_fix}.csv')
+
+        asyncio.run(send_balances_to_fund(initial_holdings))
+        asyncio.run(send_rebalance_request(ACCOUNT_ADDRESS, prices, new_compositions, initial_holdings))
+        
+
+        
+        return states_df, rewards_df, actions_df, portfolio_values_df, compositions_df, portfolio_balance, prices, initial_holdings
+    
     seed = 20
-    states_df, rewards_df, actions_df, portfolio_values_df, compositions_df = run_sim(seed)
+    states_df, rewards_df, actions_df, portfolio_values_df, compositions_df, portfolio_balance, prices, initial_holdings = run_sim(seed)
     compositions_df.set_index('Date', inplace=True)
+    print(f'portfolio balance {portfolio_balance}')
+    print(f'initial holdings {initial_holdings}')
+    print(f'prices {prices}')
 
     color_palette = pc.qualitative.Plotly
     fig1 = go.Figure()
@@ -410,11 +605,8 @@ def latest_data():
         margin=dict(l=40, r=40, t=40, b=80)
     )
     graph_json_1 = json.dumps(fig1, cls=PlotlyJSONEncoder)
-    wsteth_price = price_timeseries['WSTETH'].to_frame('WSTETH Price').iloc[-1]
-    reth_price = price_timeseries['RETH'].to_frame('RETH Price').iloc[-1]
-    sfrxeth_price = price_timeseries['SFRXETH'].to_frame('SFRXETH Price').iloc[-1]
 
-    print(f"Prices: wstETH: {wsteth_price.values[0]}, rETH: {reth_price.values[0]}, sfrxETH: {sfrxeth_price.values[0]}")
+    print(f"Prices: wstETH: {prices['wsteth_price']}, rETH: {prices['reth_price']}, sfrxETH: {prices['sfrxeth_price']}")
 
     normalized_data = normalize_asset_returns(price_timeseries, start_date=start_date, normalize_value=1)
     portfolio_values_df.set_index('Date', inplace=True)
@@ -490,10 +682,11 @@ def latest_data():
 
     network = "Starknet Sepolia"
 
-    # Ensure price values are extracted correctly
-    wsteth_price_value = wsteth_price.values[0]
-    reth_price_value = reth_price.values[0]
-    sfrxeth_price_value = sfrxeth_price.values[0]
+    print(f'portfolio balance {portfolio_balance}')
+
+    #wsteth_balance, reth_balance, sfrxeth_balance, eth_balance = asyncio.run(get_lst_balance())
+    #print(f'wsteth bal {wsteth_balance}, reth bal {reth_balance}, sfrxeth bal {sfrxeth_balance}, eth bal {eth_balance}')
+
 
     results = {
         "start date": start_date,
@@ -520,17 +713,23 @@ def latest_data():
         "sfrxETH expected return": f"{sfrxeth_expected_return*100:.2f}%",
         "current risk free": f"{current_risk_free*100:.2f}%",
         "address": ACCOUNT_ADDRESS,
-        "eth balance": balance,
+        "eth balance": initial_holdings['eth'],
+        "wsteth balance": initial_holdings['wsteth'],
+        "reth balance": initial_holdings['reth'],
+        "sfrxeth balance": initial_holdings['sfrxeth'],
         "network": network,
-        "wsteth price": wsteth_price_value,
-        "reth price": reth_price_value, 
-        "sfrxeth price": sfrxeth_price_value,
-        "data_version": data_version
+        "wsteth price": prices['wsteth_price'],
+        "reth price": prices['reth_price'], 
+        "sfrxeth price": prices['sfrxeth_price'],
+        "eth price": prices['eth_price'],
+        "data_version": data_version,
+        "portfolio balance": portfolio_balance
     }
 
-    print(f"wsteth price {wsteth_price_value}")
-    print(f"reth price {reth_price_value}")
-    print(f"sfrxeth price {sfrxeth_price_value}")
+    print(f"wsteth price {prices['wsteth_price']}")
+    print(f"reth price {prices['reth_price']}")
+    print(f"sfrxeth price {prices['sfrxeth_price']}")
+    print(f"ETH price {prices['eth_price']}")
     print(f"Data Version: {data_version}")
 
     results_df = pd.DataFrame([results])
@@ -540,6 +739,8 @@ def latest_data():
     cached_data = {"results": results, "graph_1": graph_json_1, "graph_2": graph_json_2, "graph_3": graph_json_3}
 
     return jsonify(cached_data)
+
+
 
 
 if __name__ == "__main__":
