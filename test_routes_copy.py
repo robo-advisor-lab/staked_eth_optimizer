@@ -11,6 +11,7 @@ from starknet_py.net.account.account import Account
 from starknet_py.hash.selector import get_selector_from_name
 from starknet_py.net.client_models import Call
 from dotenv import load_dotenv
+import pandas as pd
 
 # Load environment variables
 load_dotenv()
@@ -63,13 +64,17 @@ async def rebalance_fund_account(prices, initial_holdings, new_compositions, rec
     print(f'rebalance fund func new comp: {new_compositions}')
     
     total_value = sum(initial_holdings[token] * prices[f"{token}_price"] for token in initial_holdings)
-    print(f'total val {total_value}')
+    print(f'initial total val {total_value}')
     
     target_balances = {token: total_value * new_compositions.get(token, 0) / prices[f"{token}_price"] for token in initial_holdings}
     print(f'target bal {target_balances}')
+
+    target_bal_results = {"target balances": target_balances}
+    target_bal_df = pd.DataFrame([target_bal_results])
+    target_bal_df.to_csv('data/rebal_target_bal.csv')
     
     differences = {token: target_balances[token] - initial_holdings[token] for token in initial_holdings}
-    print(f'differences: {differences}')
+    print(f'differences to adjust: {differences}')
     
     for token, difference in differences.items():
         if difference > 0:
@@ -78,6 +83,13 @@ async def rebalance_fund_account(prices, initial_holdings, new_compositions, rec
             await transfer_tokens_from_fund(token, -difference, recipient_address)
     
     await send_back_balances(target_balances, recipient_address)
+
+    # Re-check total value after rebalancing
+    total_final_value = sum(target_balances[token] * prices[f"{token}_price"] for token in target_balances)
+    print(f'Final total value after rebalance: {total_final_value}')
+    
+    return target_balances
+
     
 async def transfer_tokens_to_fund(token, amount, recipient_address):
     print(f'starting transfer to fund function...')
