@@ -68,8 +68,12 @@ if not os.path.exists(pyngrok_config.ngrok_path):
 conf.set_default(pyngrok_config)
 conf.get_default().ssl_context = context
 
+load_dotenv()
+
+ngrok_token = os.getenv('ngrok_token')
+
 # Set your ngrok auth token
-ngrok.set_auth_token("2dJnEh2BuhCkFPQMSgCnalDSang_2oJv3XAMyVJse8yyhhiNJ")
+ngrok.set_auth_token(ngrok_token)
 
 # Start ngrok
 public_url = ngrok.connect(5000, pyngrok_config=pyngrok_config).public_url
@@ -83,7 +87,7 @@ deployment_version = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
 print(f"Current working directory: {os.getcwd()}")
 
 # Set up the account and client
-load_dotenv()
+
 
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 ACCOUNT_ADDRESS = os.getenv('ACCOUNT_ADDRESS')
