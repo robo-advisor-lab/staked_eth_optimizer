@@ -107,7 +107,7 @@ def run_sim(seed):
     return states_df, rewards_df, actions_df, portfolio_values_df, compositions_df
 
 def main():
-    num_runs = 10
+    num_runs = 5
     seeds = [5, 10, 15, 20, 40, 100, 200, 300, 500, 800]
     latest_portfolio_values = []
     portfolio_values = []

@@ -64,16 +64,16 @@ pyngrok_config = conf.PyngrokConfig(ngrok_path=ngrok_path)
 if not os.path.exists(pyngrok_config.ngrok_path):
     installer.install_ngrok(pyngrok_config.ngrok_path, context=context)
 
-# # Configure ngrok with custom SSL context
-# conf.set_default(pyngrok_config)
-# conf.get_default().ssl_context = context
+# Configure ngrok with custom SSL context
+conf.set_default(pyngrok_config)
+conf.get_default().ssl_context = context
 
-# # Set your ngrok auth token
-# ngrok.set_auth_token("2dJnEh2BuhCkFPQMSgCnalDSang_2oJv3XAMyVJse8yyhhiNJ")
+# Set your ngrok auth token
+ngrok.set_auth_token("2dJnEh2BuhCkFPQMSgCnalDSang_2oJv3XAMyVJse8yyhhiNJ")
 
-# # Start ngrok
-# public_url = ngrok.connect(5000, pyngrok_config=pyngrok_config).public_url
-# print("ngrok public URL:", public_url)
+# Start ngrok
+public_url = ngrok.connect(5000, pyngrok_config=pyngrok_config).public_url
+print("ngrok public URL:", public_url)
 
 app = Flask(__name__)
 deployment_version = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')

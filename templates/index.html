@@ -163,15 +163,13 @@
             localStorage.setItem('cachedData', JSON.stringify(data));
             localStorage.setItem('lastFetchTime', new Date().toISOString());
             localStorage.setItem('dataVersion', data.results['data_version']);
-            localStorage.setItem('deploymentVersion', '{{ version }}'); // Ensure deployment version is also cached
         }
 
         function getCachedData() {
             const cachedData = localStorage.getItem('cachedData');
             const lastFetchTime = localStorage.getItem('lastFetchTime');
             const dataVersion = localStorage.getItem('dataVersion');
-            const deploymentVersion = localStorage.getItem('deploymentVersion');
-            return { cachedData: JSON.parse(cachedData), lastFetchTime: new Date(lastFetchTime), dataVersion, deploymentVersion };
+            return { cachedData: JSON.parse(cachedData), lastFetchTime: new Date(lastFetchTime), dataVersion };
         }
 
         function fetchLatestData(force = false) {
@@ -212,14 +210,14 @@
         }
 
         window.onload = () => {
-            const { cachedData, lastFetchTime, dataVersion, deploymentVersion } = getCachedData();
+            const { cachedData, lastFetchTime, dataVersion } = getCachedData();
             const now = new Date();
             const hoursDifference = Math.abs(now - lastFetchTime) / 36e5;
 
-            if (cachedData && hoursDifference < 1 && deploymentVersion === '{{ version }}') {
-                updatePage(cachedData); // Use cached data if it's less than an hour old and deployment version matches
+            if (cachedData && hoursDifference < 1) {
+                updatePage(cachedData); // Use cached data if it's less than an hour old
             } else {
-                fetchLatestData(true); // Force initial fetch if no valid cache or deployment version changed
+                fetchLatestData(true); // Force initial fetch if no valid cache
             }
             scheduleNextFetch(); // Schedule the next fetch at the top of the next hour
         };
