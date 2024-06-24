@@ -36,7 +36,7 @@ from dotenv import load_dotenv
 import plotly.colors as pc
 from datetime import timedelta
 from scripts.utils import set_random_seed, normalize_asset_returns, calculate_cumulative_return, calculate_cagr
-from scripts.sepolia_model import StakedETHEnv
+from scripts.testnet_model import StakedETHEnv
 from scripts.sql_scripts import sql, eth_price
 from scripts.processing_function import data_processing
 from flipside import Flipside
@@ -47,7 +47,7 @@ import time
 from starknet_py.net.client_models import Call
 from starknet_py.hash.selector import get_selector_from_name
 
-historical_data = pd.DataFrame()
+live_data = pd.DataFrame()
 
 eth = yf.Ticker('ETH-USD')
 eth_from_nov = eth.history(period='6mo')
@@ -77,14 +77,14 @@ conf.get_default().ssl_context = context
 
 load_dotenv()
 
-ngrok_token = os.getenv('ngrok_token')
+# ngrok_token = os.getenv('ngrok_token')
 
-# Set your ngrok auth token
-ngrok.set_auth_token(ngrok_token)
+# # Set your ngrok auth token
+# ngrok.set_auth_token(ngrok_token)
 
-# Start ngrok
-public_url = ngrok.connect(5000, pyngrok_config=pyngrok_config).public_url
-print("ngrok public URL:", public_url)
+# # Start ngrok
+# public_url = ngrok.connect(5000, pyngrok_config=pyngrok_config).public_url
+# print("ngrok public URL:", public_url)
 
 app = Flask(__name__)
 deployment_version = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
@@ -299,15 +299,8 @@ last_date = days_start_dev + timedelta(days=data_points_days)
 last_date = last_date.date()
 today = dt.date.today()
 days_left = last_date - today
+lst_prices_query = sql(today)
 api_key = os.getenv("FLIPSIDE_API_KEY")
-
-if 'date' in historical_data.columns and not historical_data['date'].empty:
-    start_date = pd.to_datetime(historical_data['date'].min()).strftime('%Y-%m-%d %H:%M:%S')
-else:
-    start_date = today.strftime('%Y-%m-%d %H:%M:%S')
-
-lst_prices_query = sql(start_date)
-
 
 @st.cache_data(ttl='15m')
 def createQueryRun(sql):
@@ -398,18 +391,6 @@ def convert_to_usd(balances, prices):
 
 #cache = Cache('cache_dir')
 
-def should_rebalance(current_time, actions_df, rebalancing_frequency):
-    if actions_df.empty:
-        return True  # Perform initial rebalance if no actions have been taken yet
-
-    current_time = pd.to_datetime(current_time)  # Convert to Timestamp
-    last_rebalance_time = pd.to_datetime(actions_df['Date'].iloc[-1])  # Get the last rebalance time
-    
-    hours_since_last_rebalance = (current_time - last_rebalance_time).total_seconds() / 3600
-    return hours_since_last_rebalance >= rebalancing_frequency
-
-
-
 
 print('at latest data')
 @app.route('/latest-data')
@@ -428,9 +409,9 @@ def latest_data():
     print(f"Cached data current date: {cached_data['results']['current date']} (type: {type(cached_data['results']['current date'])})")
     print(f"Current data version: {data_version_comp} (type: {type(data_version_comp)})")
 
-    if cached_data and cached_data['results']['current date'] == data_version_comp:
-        print("Using cached data")
-        return jsonify(cached_data)
+    # if cached_data and cached_data['results']['current date'] == data_version_comp:
+    #     print("Using cached data")
+    #     return jsonify(cached_data)
     
     print("Generating new data")
 
@@ -480,25 +461,32 @@ def latest_data():
     print('initial balances at newest latest_data', initial_balances)
     
 
-    # eth_bal_usd, wsteth_bal_usd, reth_bal_usd, sfrxeth_bal_usd = convert_to_usd(new_balances, prices)
-    # new_portfolio_balance = wsteth_bal_usd + reth_bal_usd + sfrxeth_bal_usd
-    # new_bal_with_eth = wsteth_bal_usd + reth_bal_usd + sfrxeth_bal_usd + eth_bal_usd
+    # if cached_data is not None:
+    #     print("Cached Data:", cached_data)
+    #     if 'data_version' in cached_data:
+    #         print("Cached Data Version:", cached_data["data_version"])
+    #     else:
+    #         print("Cached Data does not have 'data_version' key")
+    # else:
+    #     print("No cached data found")
 
-    eth_composition = eth_bal_usd / initial_portfolio_balance
-    wsteth_composition = wsteth_bal_usd / initial_portfolio_balance
-    reth_composition = reth_bal_usd / initial_portfolio_balance
-    sfrxeth_composition = sfrxeth_bal_usd / initial_portfolio_balance
+    # # Check if cached data is valid
+    # if cached_data and 'data_version' in cached_data and cached_data["data_version"] == data_version:
+    #     return jsonify(cached_data)
 
-    end_date = dt.datetime.now().strftime('%Y-%m-%d %H:00:00')
-    comp_dict = {
-        "wstETH comp": wsteth_composition,
-        "rETH comp": reth_composition,
-        "sfrxETH comp": sfrxeth_composition,
-        "date": end_date 
-    }
-    print(f'old historical data {historical_data}')
-    update_historical_data(comp_dict)
-    print(f'updated historical data {historical_data}')
+    # try:
+    #     price_response_data, q_id_price = createQueryRun(lst_prices_query)
+    #     if q_id_price:
+    #         price_df_json = getQueryResults(q_id_price)
+    #         if price_df_json:
+    #             prices_df = pd.DataFrame(price_df_json['result']['rows'])
+    #             print(f"Price data fetched: {prices_df.head()}")
+    #         else:
+    #             print('Failed to get price results')
+    #     else:
+    #         print('Failed to create query run')
+    # except Exception as e:
+    #     print(f"Error in fetching price data: {e}")
 
     try:
         three_month_tbill = fetch_and_process_tbill_data(three_month_tbill_historical_api, "observations", "date", "value")
@@ -526,20 +514,14 @@ def latest_data():
 
     all_assets = ['RETH', 'SFRXETH', 'WSTETH']
     #price_timeseries.reset_index()
-    print(f'historical: {historical_data}')
-    print(f"historical_date_type: {type(historical_data['date'])}")
-    start_date = str((pd.to_datetime(historical_data['date'].min()).strftime('%Y-%m-%d %H:%M:%S')))
-    
+
+    start_date = str((price_timeseries['ds'].min()).strftime('%Y-%m-%d %H:%M:%S'))
+    end_date = dt.datetime.now().strftime('%Y-%m-%d %H:00:00')
     end_time_fix = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
 
-    hist_comp = historical_data.copy()
-    hist_comp.set_index('date', inplace=True)
-    print(f'hist comp for env {hist_comp}')
-
     def run_sim(seed, prices):
-        rebalancing_frequency = 24
         set_random_seed(seed)
-        env = StakedETHEnv(historical_data=price_timeseries, rebalancing_frequency=rebalancing_frequency, start_date=start_date, end_date=end_date, assets=all_assets, seed=seed, compositions=hist_comp, alpha=0.05)
+        env = StakedETHEnv(historical_data=price_timeseries, rebalancing_frequency=24, start_date=start_date, end_date=end_date, assets=all_assets, seed=seed, alpha=0.05)
         model = PPO("MlpPolicy", env, verbose=1)
         model.learn(total_timesteps=10000)
         model.save("staked_eth_ppo")
@@ -575,61 +557,83 @@ def latest_data():
         portfolio_values_df = env.get_portfolio_values_df()
         compositions_df = env.get_compositions_df()
 
-        if actions_df.empty:
-            print("Actions dataframe is empty. Performing initial rebalance.")
-            actions_df = compositions_df
+        new_compositions = {
+            "wsteth": float(compositions_df.iloc[-1]["WSTETH_weight"]),
+            "reth": float(compositions_df.iloc[-1]["RETH_weight"]),
+            "sfrxeth": float(compositions_df.iloc[-1]["SFRXETH_weight"]),
+            "eth": float(1.0 - (compositions_df.iloc[-1]["WSTETH_weight"] + compositions_df.iloc[-1]["RETH_weight"] + compositions_df.iloc[-1]["SFRXETH_weight"]))
+        }
 
-        if should_rebalance(end_date, actions_df, rebalancing_frequency):
-            print('actions df', actions_df)
-            new_compositions = { #use last action_df instead?
-                "wsteth": float(actions_df.iloc[-1]["WSTETH_weight"]),
-                "reth": float(actions_df.iloc[-1]["RETH_weight"]),
-                "sfrxeth": float(actions_df.iloc[-1]["SFRXETH_weight"]),
-                "eth": float(1.0 - (actions_df.iloc[-1]["WSTETH_weight"] + compositions_df.iloc[-1]["RETH_weight"] + compositions_df.iloc[-1]["SFRXETH_weight"]))
-            }
+        print(f'new compositions: {new_compositions}')
 
-            print(f'new compositions: {new_compositions}')
+        total_value = sum(initial_holdings[token] * prices[f"{token}_price"] for token in initial_holdings)
+        target_balances = {token: total_value * new_compositions.get(token, 0) / prices[f"{token}_price"] for token in initial_holdings}
+        
+        rebal_info = {
+            "new compositions": new_compositions,
+            "prices": prices,
+            "initial holdings": initial_holdings,
+            "account address": ACCOUNT_ADDRESS,
+            "target balances": target_balances,
+            "wsteth bal usd": wsteth_bal_usd,
+            "reth bal usd": reth_bal_usd,
+            "sfrxeth bal usd": sfrxeth_bal_usd,
+            "portfolio balance": initial_portfolio_balance
+        }
 
-            total_value = sum(initial_holdings[token] * prices[f"{token}_price"] for token in initial_holdings)
-            target_balances = {token: total_value * new_compositions.get(token, 0) / prices[f"{token}_price"] for token in initial_holdings}
-            
-            rebal_info = {
-                "new compositions": new_compositions,
-                "prices": prices,
-                "initial holdings": initial_holdings,
-                "account address": ACCOUNT_ADDRESS,
-                "target balances": target_balances,
-                "wsteth bal usd": wsteth_bal_usd,
-                "reth bal usd": reth_bal_usd,
-                "sfrxeth bal usd": sfrxeth_bal_usd,
-                "portfolio balance": initial_portfolio_balance
-            }
-
-            rebal_df = pd.DataFrame([rebal_info])
-            rebal_df.to_csv(f'data/rebal_results{end_time_fix}.csv')
-            
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            loop.run_until_complete(send_rebalance_request(ACCOUNT_ADDRESS, prices, new_compositions, initial_holdings))
-            loop.run_until_complete(send_balances_to_fund(initial_holdings, target_balances))
-            #loop.run_until_complete(send_rebalance_request(ACCOUNT_ADDRESS, prices, new_compositions, initial_holdings))
-            loop.close()
-            
-        else:
-            print("Rebalancing is not required at this time.")
-        return states_df, rewards_df, actions_df, portfolio_values_df, compositions_df, prices, initial_holdings, initial_portfolio_balance#, new_compositions
+        rebal_df = pd.DataFrame([rebal_info])
+        rebal_df.to_csv(f'data/rebal_results{end_time_fix}.csv')
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        loop.run_until_complete(send_rebalance_request(ACCOUNT_ADDRESS, prices, new_compositions, initial_holdings))
+        loop.run_until_complete(send_balances_to_fund(initial_holdings, target_balances))
+        #loop.run_until_complete(send_rebalance_request(ACCOUNT_ADDRESS, prices, new_compositions, initial_holdings))
+        loop.close()
+        
+        return states_df, rewards_df, actions_df, portfolio_values_df, compositions_df, prices, initial_holdings, initial_portfolio_balance, new_compositions
 
     
     seed = 20
-    states_df, rewards_df, actions_df, portfolio_values_df, compositions_df, prices, initial_holdings, initial_portfolio_balance = run_sim(seed, prices)
+    states_df, rewards_df, actions_df, portfolio_values_df, compositions_df, prices, initial_holdings, initial_portfolio_balance, new_compositions = run_sim(seed, prices)
     compositions_df.set_index('Date', inplace=True)
     #print(f'portfolio balance {portfolio_balance}')
     #print(f'initial holdings {initial_holdings}')
     print(f'prices {prices}')
 
     color_palette = pc.qualitative.Plotly
-    
+    fig1 = go.Figure()
+
+    for i, column in enumerate(compositions_df.columns):
+        fig1.add_trace(go.Scatter(
+            x=compositions_df.index,
+            y=compositions_df[column],
+            mode='lines',
+            stackgroup='one',
+            name=column,
+            line=dict(color=color_palette[i % len(color_palette)])
+        ))
+
+    fig1.update_layout(
+        title='LST Optimizer Composition Over Time',
+        barmode='stack',
+        xaxis=dict(
+            title='Date',
+            tickmode='auto',
+            nticks=20,
+            tickformat='%Y-%m-%d',
+            tickangle=-45
+        ),
+        yaxis=dict(
+            title='Composition',
+            tickmode='auto',
+            nticks=10
+        ),
+        legend=dict(x=1.05, y=0.5),
+        margin=dict(l=40, r=40, t=40, b=80)
+    )
+    graph_json_1 = json.dumps(fig1, cls=PlotlyJSONEncoder)
 
     print(f"Prices: wstETH: {prices['wsteth_price']}, rETH: {prices['reth_price']}, sfrxETH: {prices['sfrxeth_price']}")
 
@@ -736,48 +740,10 @@ def latest_data():
         "sfrxETH comp": sfrxeth_composition,
         "date": end_date 
     }
-    print(f'old historical data {historical_data}')
+
     update_historical_data(comp_dict)
-    print(f'updated historical data {historical_data}')
 
-    #print(f'target comp {new_compositions}')
-
-    fig1 = go.Figure()
-
-    graph_comp_data = historical_data.copy()
-    graph_comp_data.set_index('date', inplace=True)
-
-    for i, column in enumerate(graph_comp_data.columns):
-        fig1.add_trace(go.Scatter(
-            x=graph_comp_data.index,
-            y=graph_comp_data[column],
-            mode='lines',
-            stackgroup='one',
-            name=column,
-            line=dict(color=color_palette[i % len(color_palette)])
-        ))
-
-    fig1.update_layout(
-        title='LST Optimizer Composition Over Time',
-        barmode='stack',
-        xaxis=dict(
-            title='Date',
-            tickmode='auto',
-            nticks=20,
-            tickformat='%Y-%m-%d',
-            tickangle=-45
-        ),
-        yaxis=dict(
-            title='Composition',
-            tickmode='auto',
-            nticks=10
-        ),
-        legend=dict(x=1.05, y=0.5),
-        margin=dict(l=40, r=40, t=40, b=80)
-    )
-    graph_json_1 = json.dumps(fig1, cls=PlotlyJSONEncoder)
-
-    #print(f"target composition {new_compositions}")
+    print(f"target composition {new_compositions}")
     print(f"ETH composition: {eth_composition * 100:.2f}%")
     print(f"wstETH composition: {wsteth_composition * 100:.2f}%")
     print(f"rETH composition: {reth_composition * 100:.2f}%")

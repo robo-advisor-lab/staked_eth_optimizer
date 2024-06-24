@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 def sql(today, days=23):
-    beginning = today - timedelta(days=days)
+    beginning = today 
     print('beginning', beginning)
     lst_prices_query = f"""
     WITH lsts AS (

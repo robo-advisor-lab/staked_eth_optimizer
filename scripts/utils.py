@@ -128,6 +128,11 @@ def calculate_cagr(history):
     number_of_hours = (history.index[-1] - history.index[0]).total_seconds() / 3600
     number_of_years = number_of_hours / (365.25 * 24)  # Convert hours to years
 
+    if number_of_years == 0:
+        return 0.0  # Return 0 if the duration is zero
+
     cagr = (final_value / initial_value) ** (1 / number_of_years) - 1
     cagr_percentage = cagr * 100
-    return cagr
+    return cagr_percentage
+
+
