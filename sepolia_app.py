@@ -95,7 +95,7 @@ print(f"Current working directory: {os.getcwd()}")
 
 # Set up the account and client
 
-
+GATEWAY_KEY = os.getenv('GATEWAY_KEY')
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 ACCOUNT_ADDRESS = os.getenv('ACCOUNT_ADDRESS')
 FUND_ACCOUNT_ADDRESS = os.getenv('FUND_ACCOUNT_ADDRESS')
@@ -104,7 +104,7 @@ WSTETH_CONTRACT_ADDRESS = os.getenv('WSTETH_CONTRACT_ADDRESS')
 RETH_CONTRACT_ADDRESS = os.getenv('RETH_CONTRACT_ADDRESS')
 SFRXETH_CONTRACT_ADDRESS = os.getenv('SFRXETH_CONTRACT_ADDRESS')
 ETH_CONTRACT_ADDRESS = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
-GATEWAY_URL = "https://starknet-sepolia.infura.io/v3/22b286f565734e3e80221a4212adc370"
+GATEWAY_URL = f"https://starknet-sepolia.infura.io/v3/{GATEWAY_KEY}"
 
 if not PRIVATE_KEY or not ACCOUNT_ADDRESS:
     raise EnvironmentError("One or more environment variables (PRIVATE_KEY, ACCOUNT_ADDRESS) are not set.")
