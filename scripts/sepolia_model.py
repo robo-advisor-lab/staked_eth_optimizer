@@ -53,6 +53,8 @@ class StakedETHEnv(gym.Env):
         self.portfolio_values_log = []
         self.compositions_log = []
 
+        #self.initial_action = np.ones(self.num_assets) / self.num_assets  # Initial equal distribution
+
         print(f"Initialized StakedETHEnv with {self.num_assets} assets.")
 
     def seed(self, seed=None):
@@ -67,16 +69,19 @@ class StakedETHEnv(gym.Env):
         for asset in ['RETH', 'SFRXETH', 'WSTETH']:
             forecast = forecast_with_rebalancing_frequency(asset, self.historical_data, self.rebalancing_frequency, self.seed_value)
             forecast_data[asset] = forecast
+            print(f"Generated forecast for {asset}: {forecast[['ds', 'yhat']].head()}")  # Debug: Print forecast
         print("Generated forecasts.")
         return forecast_data
+
+
 
     def reset(self, seed=None):
         super().reset(seed=seed)
         self.current_step = 0
         self.prev_prices = self.historical_data.iloc[self.current_step][['RETH', 'SFRXETH', 'WSTETH']].values
-        obs = self._get_obs()
         self.portfolio_value = 1.0  # Reset portfolio value at the beginning of each episode
-        self.portfolio = self.compositions.iloc[self.current_step].values  # Reset to the initial composition
+        self.portfolio = np.ones(self.num_assets) / self.num_assets  # Do not initialize the portfolio with any values
+        self.last_rebalance_time = self.start_date - pd.Timedelta(hours=self.rebalancing_frequency)  # Force rebalance at start
 
         # Initialize forecast_data
         self.forecast_data = None
@@ -88,49 +93,59 @@ class StakedETHEnv(gym.Env):
         self.portfolio_values_log = []
         self.compositions_log = []
 
-        return obs.astype(np.float32), {}  # Return the initial state and an empty info dictionary
+        obs = self._get_obs()
+        return obs.astype(np.float32), {}
+
+  # Return the initial state and an empty info dictionary  # Return the initial state and an empty info dictionary
   # Return the initial state and an empty info dictionary
 
     def step(self, action):
-        # Apply hourly returns to the portfolio composition
-        if self.current_step > 0:
-            current_prices = self.historical_data.iloc[self.current_step][['RETH', 'SFRXETH', 'WSTETH']].values
-            returns = (current_prices - self.prev_prices) / self.prev_prices
-            returns = returns.astype(np.float32)  # Ensure the returns are float32
+        print(f"Step {self.current_step}: Starting step with action {action}")
 
-            if np.any(np.isnan(returns)):
-                print(f"NaN returns detected at step {self.current_step}. Current Prices: {current_prices}, Previous Prices: {self.prev_prices}")
-                returns = np.nan_to_num(returns)  # Handle NaN values
+        if self.current_step >= len(self.historical_data):
+            done = True
+            print(f"Step {self.current_step}: Done (out of bounds)")
+            return self._get_obs(), 0, done, False, {}
 
-            self.portfolio = self.portfolio * (1 + returns)
-            self.portfolio /= np.sum(self.portfolio)  # Normalize the portfolio weights
-            self.prev_prices = current_prices
-            portfolio_value_update = (1 + np.sum(returns * self.portfolio))
+        current_prices = self.historical_data.iloc[self.current_step][['RETH', 'SFRXETH', 'WSTETH']].values
+        returns = (current_prices - self.prev_prices) / self.prev_prices
+        returns = returns.astype(np.float32)
 
-            # Check for invalid portfolio value updates
-            if np.isnan(portfolio_value_update) or np.isinf(portfolio_value_update):
-                print(f"Invalid portfolio value update at step {self.current_step}: {portfolio_value_update}")
-                portfolio_value_update = 1  # Default to no change to avoid NaN/inf
+        if np.any(np.isnan(returns)):
+            print(f"Step {self.current_step}: NaN returns detected. Current Prices: {current_prices}, Previous Prices: {self.prev_prices}")
+            returns = np.nan_to_num(returns)
 
-            self.portfolio_value *= portfolio_value_update
+        self.portfolio = self.portfolio * (1 + returns)
+        self.portfolio /= np.sum(self.portfolio)
+        self.prev_prices = current_prices
+        portfolio_value_update = (1 + np.sum(returns * self.portfolio))
 
-        # Use real-life composition data for portfolio
-        self.portfolio = self.compositions.iloc[self.current_step].values
+        if np.isnan(portfolio_value_update) or np.isinf(portfolio_value_update):
+            print(f"Step {self.current_step}: Invalid portfolio value update: {portfolio_value_update}")
+            portfolio_value_update = 1
 
-        # Rebalance the portfolio at specified intervals
+        self.portfolio_value *= portfolio_value_update
+        print(f"Step {self.current_step}: Portfolio value updated to {self.portfolio_value}")
+
         current_date = self.historical_data.iloc[self.current_step]['ds']
-        if (current_date - self.last_rebalance_time).total_seconds() / 3600 >= self.rebalancing_frequency:
+        time_since_last_rebalance = (current_date - self.last_rebalance_time).total_seconds() / 3600
+        print(f"Step {self.current_step}: Current date: {current_date}, Last rebalance time: {self.last_rebalance_time}, Time since last rebalance: {time_since_last_rebalance} hours")
+
+        # Generate forecasts starting from the second step
+        if self.current_step > 0:
+            self.forecast_data = self.generate_forecasts()
+
+        if time_since_last_rebalance >= self.rebalancing_frequency:
             action = np.clip(action, 0, 1)
             if np.sum(action) == 0:
-                action = np.ones_like(action) / len(action)  # Default to equal weights to avoid division by zero
+                action = np.ones_like(action) / len(action)
 
             action /= np.sum(action)
             self.portfolio = action
 
-            self.forecast_data = self.generate_forecasts()
-
-            self.last_rebalance_time = current_date  # Update the last rebalance time
+            self.last_rebalance_time = current_date
             self.actions_log.append((action, current_date))
+            print(f"Step {self.current_step}: Rebalanced portfolio to {self.portfolio} at {current_date}")
 
         forecasted_prices = self.get_forecasted_prices() if self.forecast_data else np.zeros(self.num_assets)
         state = self._get_obs(forecasted_prices)
@@ -145,8 +160,26 @@ class StakedETHEnv(gym.Env):
 
         self.current_step += 1
 
-        info = {}
-        return state.astype(np.float32), reward, done, truncated, info
+        print(f"Step {self.current_step}: State: {state}, Reward: {reward}, Done: {done}")
+        return state.astype(np.float32), reward, done, truncated, {}
+
+    
+    def check_done(self):
+        # Check if the current step is beyond the last step in the historical data
+        done = self.current_step >= len(self.historical_data) - 1
+        print(f"Check done: {done}, Current step: {self.current_step}, Historical data length: {len(self.historical_data)}")
+        return done
+
+
+
+
+
+
+
+
+
+
+
 
 
     def _get_obs(self, forecasted_prices=None):
@@ -160,6 +193,10 @@ class StakedETHEnv(gym.Env):
     def calculate_reward(self, state, portfolio):
         current_prices = state[:self.num_assets]
         forecasted_prices = state[self.num_assets:]
+        print(f'forecasted_prices {forecasted_prices}')
+        if np.all(forecasted_prices == 0):
+            return 0.0
+
         actual_returns = (current_prices - self.prev_prices) / self.prev_prices if self.prev_prices is not None else np.zeros_like(current_prices)
         actual_returns = actual_returns.astype(np.float32)  # Ensure the returns are float32
 
@@ -181,15 +218,32 @@ class StakedETHEnv(gym.Env):
         self.prev_prices = current_prices
 
         return reward.item()  # Ensure the reward is a scalar
-
+    
     def get_forecasted_prices(self):
+        if self.forecast_data is None or self.current_step >= len(self.historical_data):
+            return np.zeros(self.num_assets)  # Return zeros if no forecast data is available or if out of bounds
+
         forecasted_prices = []
         for asset in ['RETH', 'SFRXETH', 'WSTETH']:
-            forecasted_price = self.forecast_data[asset].iloc[self.current_step]['yhat'] if self.forecast_data else 0.0
+            forecasted_price = self.forecast_data[asset].iloc[self.current_step]['yhat']
             forecasted_prices.append(forecasted_price)
         forecasted_prices = np.array(forecasted_prices)
-        return forecasted_prices.astype(np.float32)  # Ensure the forecasted prices are float32 ndarray # Ensure the forecasted prices are float32 ndarray
+        return forecasted_prices.astype(np.float32)  # Ensure the forecasted prices are float32 ndarray
 
+    def get_forecasted_prices_df(self):
+        forecasted_prices_data = []
+        for i in range(len(self.historical_data)):
+            self.current_step = i
+            forecasted_prices = self.get_forecasted_prices()
+            date = self.historical_data.iloc[i]['ds']
+            forecasted_prices_data.append([date] + forecasted_prices.tolist())
+        
+        columns = ['Date', 'RETH', 'SFRXETH', 'WSTETH']
+        forecasted_prices_df = pd.DataFrame(forecasted_prices_data, columns=columns)
+        return forecasted_prices_df
+
+
+    
     def get_historical_returns(self):
         historical_prices = self.historical_data.iloc[:self.current_step][['RETH', 'SFRXETH', 'WSTETH']]
         returns = np.log(historical_prices / historical_prices.shift(1)).dropna().values

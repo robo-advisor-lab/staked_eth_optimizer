@@ -37,7 +37,7 @@ def forecast_with_prophet(asset_name, df):
     model.fit(df_prophet)
     
     # Make a future dataframe for predictions
-    future = model.make_future_dataframe(periods=365, freq='H')  # Predicting 365 hours into the future
+    future = model.make_future_dataframe(periods=365, freq='d')  # Predicting 365 hours into the future
     forecast = model.predict(future)
     
     # Merge the forecast with actual values
@@ -61,47 +61,55 @@ def forecast_with_rebalancing_frequency(asset_name, df, rebalancing_frequency, s
     model.fit(df_prophet)
     
     # Make a future dataframe for predictions
-    future = model.make_future_dataframe(periods=rebalancing_frequency, freq='D')  # Predicting according to rebalancing frequency
+    future = model.make_future_dataframe(periods=rebalancing_frequency, freq='d')  # Predicting according to rebalancing frequency
     forecast = model.predict(future)
     
     return forecast[['ds', 'yhat']]
 
 def normalize_asset_returns(price_timeseries, start_date, normalize_value=1.0):
-    # Ensure the date is in the correct format
     start_date = pd.to_datetime(start_date)
-    
-    # Filter the timeseries data to start from the given date
+    print(f'start date {start_date}')
     filtered_data = price_timeseries[price_timeseries['ds'] >= start_date].copy()
+    print(f'normalize function filtered data {filtered_data}')
     
-    # Initialize previous prices as the prices on the start date
-    prev_prices = filtered_data.iloc[0][['RETH', 'SFRXETH', 'WSTETH']].values
-    
-    # Initialize normalized values for each asset and lists to store results
-    normalized_reth = [normalize_value]
-    normalized_sfrxeth = [normalize_value]
-    normalized_wsteth = [normalize_value]
+    if filtered_data.empty:
+        print("Filtered data is empty after applying start date.")
+        return pd.DataFrame()
+
+    # Converting data to float64 to ensure compatibility with numpy functions
+    prev_prices = filtered_data.iloc[0][['RETH', 'SFRXETH', 'WSTETH']].astype(np.float64).values
+    print(f"Initial previous prices: {prev_prices}")
+
+    normalized_values = {
+        'RETH': [normalize_value],
+        'SFRXETH': [normalize_value],
+        'WSTETH': [normalize_value]
+    }
     dates = [filtered_data.iloc[0]['ds']]
     
-    # Loop through each row in the filtered data starting from the second row
     for i in range(1, len(filtered_data)):
-        current_prices = filtered_data.iloc[i][['RETH', 'SFRXETH', 'WSTETH']].values
-        returns = (current_prices - prev_prices) / prev_prices
-        
-        # Apply the returns to the normalized values for each asset
-        normalized_reth.append(normalized_reth[-1] * (1 + returns[0]))
-        normalized_sfrxeth.append(normalized_sfrxeth[-1] * (1 + returns[1]))
-        normalized_wsteth.append(normalized_wsteth[-1] * (1 + returns[2]))
+        current_prices = filtered_data.iloc[i][['RETH', 'SFRXETH', 'WSTETH']].astype(np.float64).values
+        print(f"Iteration {i}, Current Prices: {current_prices}")
+
+        # Calculate log returns safely
+        price_ratio = current_prices / prev_prices
+        log_returns = np.log(price_ratio)
+        print(f"Price ratio: {price_ratio}")
+        print(f"Log returns: {log_returns}")
+
+        # Update the normalized values for each asset using the exponential of log returns
+        for idx, asset in enumerate(['RETH', 'SFRXETH', 'WSTETH']):
+            normalized_values[asset].append(normalized_values[asset][-1] * np.exp(log_returns[idx]))
+            print(f"Updated normalized value for {asset}: {normalized_values[asset][-1]}")
+
         dates.append(filtered_data.iloc[i]['ds'])
-        
-        # Update previous prices
         prev_prices = current_prices
     
-    # Create a DataFrame for normalized values
     normalized_returns_df = pd.DataFrame({
         'ds': dates,
-        'normalized_RETH': normalized_reth,
-        'normalized_SFRXETH': normalized_sfrxeth,
-        'normalized_WSTETH': normalized_wsteth
+        'normalized_RETH': normalized_values['RETH'],
+        'normalized_SFRXETH': normalized_values['SFRXETH'],
+        'normalized_WSTETH': normalized_values['WSTETH']
     })
     normalized_returns_df.set_index('ds', inplace=True)
     
@@ -129,10 +137,9 @@ def calculate_cagr(history):
     number_of_years = number_of_hours / (365.25 * 24)  # Convert hours to years
 
     if number_of_years == 0:
-        return 0.0  # Return 0 if the duration is zero
+        return 0
 
     cagr = (final_value / initial_value) ** (1 / number_of_years) - 1
     cagr_percentage = cagr * 100
-    return cagr_percentage
-
+    return cagr
 

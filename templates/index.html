@@ -122,11 +122,11 @@
                 ]},
                 {title: 'Account Info', items: [
                     `Address: ${data.results['address']}`,
-                    `ETH Balance: ${data.results['eth balance']}`,
                     `wstETH Balance: ${data.results['wsteth balance']}`,
                     `rETH Balance: ${data.results['reth balance']}`,
                     `sfrxETH Balance: ${data.results['sfrxeth balance']}`,
                     `Portfolio Balance USD: ${data.results['portfolio balance']}`,
+                    `Rebalancing Frequency: ${data.results['rebalance frequency']}`,
                     `Network: ${data.results['network']}`,
                     `wstETH Price: ${data.results['wsteth price']}`,
                     `rETH Price: ${data.results['reth price']}`,
@@ -150,10 +150,12 @@
                 column.appendChild(list);
                 resultsContainer.appendChild(column);
             });
-
+            
+            Plotly.newPlot('graph_0', JSON.parse(data.graph_0).data, JSON.parse(data.graph_0).layout);
             Plotly.newPlot('graph_1', JSON.parse(data.graph_1).data, JSON.parse(data.graph_1).layout);
             Plotly.newPlot('graph_2', JSON.parse(data.graph_2).data, JSON.parse(data.graph_2).layout);
             Plotly.newPlot('graph_3', JSON.parse(data.graph_3).data, JSON.parse(data.graph_3).layout);
+            Plotly.newPlot('graph_4', JSON.parse(data.graph_4).data, JSON.parse(data.graph_4).layout);
 
             // Update the data version display
             document.getElementById('data-version').textContent = data.results['data_version'];
@@ -225,11 +227,13 @@
     </script>    
 </head>
 <body>
-    <h1>Liquid Staking Token Optimizer</h1>
+    <h1>LST Index</h1>
     <div class="loading" id="loading">Fetching latest data...</div>
     <div class="graph-container" id="graph_1"></div>
     <div class="graph-container" id="graph_2"></div>
     <div class="graph-container" id="graph_3"></div>
+    <div class="graph-container" id="graph_4"></div>
+    <div class="graph-container" id="graph_0"></div>
     <h2>Results</h2>
     <div class="results-container" id="results-container"></div>
     <div class="version-info">Data Version: <span id="data-version"></span></div>
