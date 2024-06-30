@@ -53,40 +53,40 @@ from starknet_py.net.client_models import Call
 from starknet_py.hash.selector import get_selector_from_name
 
 cache = Cache('cache_dir')
-historical_data = pd.DataFrame()
-historical_port_values = pd.DataFrame()
-model_actions = pd.DataFrame()
+# historical_data = pd.DataFrame()
+# historical_port_values = pd.DataFrame()
+# model_actions = pd.DataFrame()
 
-# historical_data = cache.get('historical_data', pd.DataFrame())
-# historical_port_values = cache.get('historical_port_values', pd.DataFrame())
-# model_actions = cache.get('model_actions', pd.DataFrame())
+historical_data = cache.get('historical_data', pd.DataFrame())
+historical_port_values = cache.get('historical_port_values', pd.DataFrame())
+model_actions = cache.get('model_actions', pd.DataFrame())
 
-# # Function to update and cache historical_data
-# def update_historical_data(live_comp):
-#     global historical_data
-#     new_data = pd.DataFrame([live_comp])
-#     historical_data = pd.concat([historical_data, new_data]).reset_index(drop=True)
-#     historical_data.drop_duplicates(subset='date', keep='last', inplace=True)
-#     cache.set('historical_data', historical_data)
+# Function to update and cache historical_data
+def update_historical_data(live_comp):
+    global historical_data
+    new_data = pd.DataFrame([live_comp])
+    historical_data = pd.concat([historical_data, new_data]).reset_index(drop=True)
+    historical_data.drop_duplicates(subset='date', keep='last', inplace=True)
+    cache.set('historical_data', historical_data)
 
-# # Function to update and cache historical_port_values
-# def update_portfolio_data(values):
-#     global historical_port_values
-#     new_data = pd.DataFrame([values])
-#     historical_port_values = pd.concat([historical_port_values, new_data]).reset_index(drop=True)
-#     historical_port_values.drop_duplicates(subset='date', keep='last', inplace=True)
-#     cache.set('historical_port_values', historical_port_values)
+# Function to update and cache historical_port_values
+def update_portfolio_data(values):
+    global historical_port_values
+    new_data = pd.DataFrame([values])
+    historical_port_values = pd.concat([historical_port_values, new_data]).reset_index(drop=True)
+    historical_port_values.drop_duplicates(subset='date', keep='last', inplace=True)
+    cache.set('historical_port_values', historical_port_values)
 
-# # Function to update and cache model_actions
-# def update_model_actions(actions):
-#     global model_actions
-#     print(f'model actions before update: {model_actions}')
-#     new_data = pd.DataFrame(actions)
-#     print(f'new data: {new_data}')
-#     model_actions = pd.concat([model_actions, new_data]).reset_index(drop=True)
-#     model_actions.drop_duplicates(subset='Date', keep='last', inplace=True)
-#     print(f'model actions after update: {model_actions}')
-#     cache.set('model_actions', model_actions)
+# Function to update and cache model_actions
+def update_model_actions(actions):
+    global model_actions
+    print(f'model actions before update: {model_actions}')
+    new_data = pd.DataFrame(actions)
+    print(f'new data: {new_data}')
+    model_actions = pd.concat([model_actions, new_data]).reset_index(drop=True)
+    model_actions.drop_duplicates(subset='Date', keep='last', inplace=True)
+    print(f'model actions after update: {model_actions}')
+    cache.set('model_actions', model_actions)
 
 eth = yf.Ticker('ETH-USD')
 eth_from_nov = eth.history(period='6mo')
@@ -116,14 +116,14 @@ conf.get_default().ssl_context = context
 
 load_dotenv()
 
-# ngrok_token = os.getenv('ngrok_token')
+ngrok_token = os.getenv('ngrok_token')
 
-# # Set your ngrok auth token
-# ngrok.set_auth_token(ngrok_token)
+# Set your ngrok auth token
+ngrok.set_auth_token(ngrok_token)
 
-# # Start ngrok
-# public_url = ngrok.connect(5000, pyngrok_config=pyngrok_config).public_url
-# print("ngrok public URL:", public_url)
+# Start ngrok
+public_url = ngrok.connect(5000, pyngrok_config=pyngrok_config).public_url
+print("ngrok public URL:", public_url)
 
 app = Flask(__name__)
 deployment_version = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
@@ -362,23 +362,23 @@ async def async_trigger_rebalance(data):
 
     await send_balances_to_fund(initial_holdings, target_balances)
     
-def update_historical_data(live_comp):
-    global historical_data
-    new_data = pd.DataFrame([live_comp])
-    historical_data = pd.concat([historical_data, new_data]).reset_index(drop=True)
-    historical_data.drop_duplicates(subset='date', keep='last', inplace=True)
+# def update_historical_data(live_comp):
+#     global historical_data
+#     new_data = pd.DataFrame([live_comp])
+#     historical_data = pd.concat([historical_data, new_data]).reset_index(drop=True)
+#     historical_data.drop_duplicates(subset='date', keep='last', inplace=True)
    
-def update_portfolio_data(values):
-    global historical_port_values
-    new_data = pd.DataFrame([values])
-    historical_port_values = pd.concat([historical_port_values, new_data]).reset_index(drop=True)
-    historical_port_values.drop_duplicates(subset='date', keep='last', inplace=True)
+# def update_portfolio_data(values):
+#     global historical_port_values
+#     new_data = pd.DataFrame([values])
+#     historical_port_values = pd.concat([historical_port_values, new_data]).reset_index(drop=True)
+#     historical_port_values.drop_duplicates(subset='date', keep='last', inplace=True)
     
-def update_model_actions(actions):
-    global model_actions
-    new_data = pd.DataFrame(actions)
-    model_actions = pd.concat([model_actions, new_data]).reset_index(drop=True)
-    model_actions.drop_duplicates(subset='Date', keep='last', inplace=True)
+# def update_model_actions(actions):
+#     global model_actions
+#     new_data = pd.DataFrame(actions)
+#     model_actions = pd.concat([model_actions, new_data]).reset_index(drop=True)
+#     model_actions.drop_duplicates(subset='Date', keep='last', inplace=True)
     
 @app.route('/trigger-rebalance', methods=['POST'])
 def trigger_rebalance():
@@ -418,7 +418,7 @@ else:
 
 lst_prices_query = sql(start_date)
 
-@st.cache_data(ttl='15m')
+#@st.cache_data(ttl='15m')
 def createQueryRun(sql):
     url = "https://api-v2.flipsidecrypto.xyz/json-rpc"
     payload = json.dumps({
@@ -442,7 +442,7 @@ def createQueryRun(sql):
     query_run_id = response_data['result']['queryRun']['id']
     return response_data, query_run_id
 
-@st.cache_data(ttl='15m')
+#@st.cache_data(ttl='15m')
 def getQueryResults(query_run_id, attempts=10, delay=30):
     url = "https://api-v2.flipsidecrypto.xyz/json-rpc"
     payload = json.dumps({
@@ -669,7 +669,7 @@ def latest_data():
     print(f'hist comp for env {hist_comp}')
 
     def run_sim(seed, prices):
-        rebalancing_frequency = 2
+        rebalancing_frequency = 24
         set_random_seed(seed)
         env = StakedETHEnv(historical_data=price_timeseries, rebalancing_frequency=rebalancing_frequency, start_date=start_date, end_date=end_date, assets=all_assets, seed=seed, compositions=hist_comp, alpha=0.05)
         model = PPO.load("staked_eth_ppo")
@@ -1064,13 +1064,12 @@ def latest_data():
     # Cache the results data
     cached_data = {"results": results, "graph_0": graph_json_0, "graph_1": graph_json_1, "graph_2": graph_json_2, "graph_3": graph_json_3, "graph_4": graph_json_4}
 
-    #cache.set('latest_data', cached_data)
     historical_data.to_csv(f'data/live_historical_data.csv')
 
     cache.set('latest_data', cached_data)
-    # cache.set('historical_data', historical_data)
-    # cache.set('historical_port_values', historical_port_values)
-    # cache.set('model_actions', model_actions)
+    cache.set('historical_data', historical_data)
+    cache.set('historical_port_values', historical_port_values)
+    cache.set('model_actions', model_actions)
 
     return jsonify(cached_data)
 
@@ -1080,6 +1079,6 @@ if __name__ == "__main__":
         #latest_data()
 
     print('Starting Flask app...')
-    app.run(debug=True, use_debugger=True, use_reloader=False, port=5005)
+    app.run(debug=True, use_debugger=True, use_reloader=False, port=5000)
     print('Flask app ending.')
     cache.close()
