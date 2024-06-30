@@ -126,7 +126,7 @@
                     `rETH Balance: ${data.results['reth balance']}`,
                     `sfrxETH Balance: ${data.results['sfrxeth balance']}`,
                     `Portfolio Balance USD: ${data.results['portfolio balance']}`,
-                    `Rebalancing Frequency: ${data.results['rebalance frequency']}`,
+                    `Rebalancing Frequency: ${data.results['rebalance frequency']} hours`,
                     `Network: ${data.results['network']}`,
                     `wstETH Price: ${data.results['wsteth price']}`,
                     `rETH Price: ${data.results['reth price']}`,
@@ -227,7 +227,7 @@
     </script>    
 </head>
 <body>
-    <h1>LST Index</h1>
+    <h1>Liquid Staking Token Index</h1>
     <div class="loading" id="loading">Fetching latest data...</div>
     <div class="graph-container" id="graph_1"></div>
     <div class="graph-container" id="graph_2"></div>
@@ -237,5 +237,10 @@
     <h2>Results</h2>
     <div class="results-container" id="results-container"></div>
     <div class="version-info">Data Version: <span id="data-version"></span></div>
+    <footer style="text-align: center; margin-top: 20px; padding: 10px; background-color: #333; color: #fff;">
+        <p>Contact: <a href="mailto:brandynham1120@gmail.com" style="color: #fff;">brandynham1120@gmail.com</a></p>
+        <p>Github: <a href="https://github.com/robo-advisor-lab/staked_eth_optimizer" style="color: #fff;">https://github.com/robo-advisor-lab/staked_eth_optimizer</a></p>
+        <p>Gitbook: <a href="https://robo-advisor-labs.gitbook.io/lst-index/" style="color: #fff;">https://robo-advisor-labs.gitbook.io/lst-index/</a></p>
+    </footer>
 </body>
 </html>
