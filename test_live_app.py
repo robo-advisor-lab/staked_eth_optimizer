@@ -26,6 +26,7 @@ import traceback
 from starknet_py.net.client_errors import ClientError
 import marshmallow
 from diskcache import Cache
+import pytz
 
 import math
 from decimal import Decimal, ROUND_DOWN
@@ -415,6 +416,8 @@ if 'date' in historical_data.columns and not historical_data['date'].empty:
     start_date = pd.to_datetime(historical_data['date'].min()).strftime('%Y-%m-%d %H:00:00')
 else:
     start_date = today.strftime('%Y-%m-%d %H:00:00')
+print(f'histortical data {historical_data}')
+print(f'sql start date: {start_date}')
 
 lst_prices_query = sql(start_date)
 
@@ -553,12 +556,15 @@ def latest_data():
     #print('cached data:', cached_data)
     today = dt.date.today()
     days_left = last_date - today
-    data_version = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
-    data_version_comp = dt.datetime.now().strftime('%Y-%m-%d %H:00:00')
+    panama_tz = pytz.timezone('America/Panama')
+
+    data_version = dt.datetime.now(panama_tz).strftime('%Y-%m-%d %H-00-00')
+    data_version_comp = dt.datetime.now(panama_tz).strftime('%Y-%m-%d %H:00 EST-0500')
 
     cached_data = cache.get('latest_data')    
-    #print(f"Cached data current date: {cached_data['results']['current date']} (type: {type(cached_data['results']['current date'])})")
-    #print(f"Current data version: {data_version_comp} (type: {type(data_version_comp)})")
+    print(f'cached data {cached_data}')
+    print(f"Cached data current date: {cached_data['results']['current date']} (type: {type(cached_data['results']['current date'])})")
+    print(f"Current data version: {data_version_comp} (type: {type(data_version_comp)})")
 
     if cached_data and cached_data['results']['current date'] == data_version_comp:
         print("Using cached data")
@@ -586,6 +592,7 @@ def latest_data():
     price_dataframe = prices_df
     print('price dataframe', price_dataframe)
     price_timeseries = data_processing(price_dataframe)
+    print(f'price_timeseries {price_timeseries}')
 
     prices = {
             'wsteth_price': float(price_timeseries['WSTETH'].to_frame('WSTETH Price').iloc[-1].values[0]),
@@ -621,7 +628,10 @@ def latest_data():
     reth_composition = reth_bal_usd / initial_portfolio_balance
     sfrxeth_composition = sfrxeth_bal_usd / initial_portfolio_balance
 
-    end_date = dt.datetime.now().strftime('%Y-%m-%d %H:00:00')
+    end_date = dt.datetime.now(panama_tz).strftime('%Y-%m-%d %H:00:00')
+    print(f'end date {end_date}')
+    end_date = pd.to_datetime(end_date).tz_localize(panama_tz)
+    print(f'end date {end_date}')
     comp_dict = {
         "wstETH comp": wsteth_composition,
         "rETH comp": reth_composition,
@@ -660,14 +670,64 @@ def latest_data():
     #price_timeseries.reset_index()
     print(f'historical: {historical_data}')
     print(f"historical_date_type: {type(historical_data['date'])}")
-    start_date = str((pd.to_datetime(historical_data['date'].min()).strftime('%Y-%m-%d %H:00:00')))
+    start_date = pd.to_datetime(historical_data['date'].min())#.tz_localize(panama_tz) 
+    #start_date = start_date - timedelta(hours=1)
+    print(f'start date {start_date}')
+
+
+    #start_date = pd.to_datetime(start_date).tz_localize('UTC').strftime('%Y-%m-%d %H:00:00')
+    #end_date = pd.to_datetime(end_date).tz_localize(panama_tz)
+    print(f'end date {end_date}')
+
+    price_timeseries['ds'] = pd.to_datetime(price_timeseries['ds'])#.dt.tz_convert(panama_tz)
+
+
+
+    # Localize the 'ds' column of price_timeseries to the Panama timezone
+    #price_timeseries['ds'] = pd.to_datetime(price_timeseries['ds']).dt.tz_localize(panama_tz)
+
+
     
     end_time_fix = dt.datetime.now().strftime('%Y-%m-%d %H-00-00')
 
     hist_comp = historical_data.copy()
     hist_comp.set_index('date', inplace=True)
+    #hist_comp.index = pd.to_datetime(hist_comp.index).tz_localize(panama_tz)
     print(f'hist comp for env {hist_comp}')
 
+    def prepare_data_for_simulation(price_timeseries, start_date, end_date):
+        """
+        Ensure price_timeseries has entries for start_date and end_date.
+        If not, fill in these dates using the last available data.
+        """
+        # Ensure 'ds' is in datetime format
+        price_timeseries['ds'] = pd.to_datetime(price_timeseries['ds'])
+        
+        # Set the index to 'ds' for easier manipulation
+        if price_timeseries.index.name != 'ds':
+            price_timeseries.set_index('ds', inplace=True)
+        
+        # Check if start_date and end_date exist in the data
+        required_dates = pd.date_range(start=start_date, end=end_date, freq='H')
+        all_dates = price_timeseries.index.union(required_dates)
+        
+        # Reindex the dataframe to ensure all dates from start to end are present
+        price_timeseries = price_timeseries.reindex(all_dates)
+        
+        # Forward fill to handle NaN values if any dates were missing
+        price_timeseries.fillna(method='ffill', inplace=True)
+
+        # Reset index if necessary or keep the datetime index based on further needs
+        price_timeseries.reset_index(inplace=True, drop=False)
+        price_timeseries.rename(columns={'index': 'ds'}, inplace=True)
+        
+        return price_timeseries
+    
+    price_timeseries = prepare_data_for_simulation(price_timeseries, start_date, end_date)
+    print(price_timeseries.head())
+    print(price_timeseries.tail())
+
+    
     def run_sim(seed, prices):
         rebalancing_frequency = 24
         set_random_seed(seed)
@@ -686,7 +746,7 @@ def latest_data():
         done = False
         print("Starting simulation loop...")
 
-        max_steps = len(env.historical_data)  # Set the maximum number of steps
+        max_steps = len(env.compositions)  # Set the maximum number of steps
         # max_steps = 1
 
         while not done and env.current_step < max_steps:
@@ -713,6 +773,7 @@ def latest_data():
 
         print("Simulation loop completed.")
 
+
         states_df = env.get_states_df()
         rewards_df = env.get_rewards_df()
         actions_df = env.get_actions_df()
@@ -726,6 +787,7 @@ def latest_data():
             initial_action = {f"{asset}_weight": equal_weight for asset in assets}
             initial_action['Date'] = pd.Timestamp.now()  # Add a timestamp for the action
             return pd.DataFrame([initial_action])
+        print(f'portfolio values: {portfolio_values_df}')
 
         # Define the assets
         assets = ['WSTETH', 'RETH', 'SFRXETH']
@@ -815,8 +877,8 @@ def latest_data():
     graph_json_4 = json.dumps(fig_forecasted, cls=PlotlyJSONEncoder)
 
     print(f"Prices: wstETH: {prices['wsteth_price']}, rETH: {prices['reth_price']}, sfrxETH: {prices['sfrxeth_price']}")
-
-    normalized_data = normalize_asset_returns(price_timeseries, start_date=start_date, normalize_value=1)
+    print(f'start date {start_date}, end date {end_date}')
+    normalized_data = normalize_asset_returns(price_timeseries, start_date=start_date, end_date=end_date, normalize_value=1)
     portfolio_values_df.set_index('Date', inplace=True)
     rewards_df.set_index('Date', inplace=True)
 
@@ -842,8 +904,15 @@ def latest_data():
     graph_json_2 = json.dumps(fig2, cls=PlotlyJSONEncoder)
 
     comparison_end = portfolio_values_df.index.max()
+    panama_tz = pytz.timezone('America/Panama')
+
+    # Localize the datetime to UTC if it's not already localized
+    normalized_data.index = normalized_data.index.tz_localize(None)
+
+    print(f'comparison end {comparison_end}')
+    print(f'normalized {normalized_data}')
     filtered_normalized = normalized_data[normalized_data.index <= comparison_end]
-    comparison = filtered_normalized.merge(portfolio_values_df, left_index=True, right_index=True, how='inner')
+    comparison = normalized_data.merge(portfolio_values_df, left_index=True, right_index=True, how='inner')
     
     traces = []
     for i, column in enumerate(comparison.columns):
@@ -922,6 +991,8 @@ def latest_data():
     print(f'old historical data {historical_data}')
     update_historical_data(comp_dict)
     print(f'updated historical data {historical_data}')
+
+    new_portfolio_balance = round(new_portfolio_balance, 2)
 
     portfolio_dict = {
         "Portfolio Value": new_portfolio_balance,
@@ -1012,6 +1083,12 @@ def latest_data():
     #print(f'old balance usd w/ eth: {initial_portfolio_balance_eth}')
     print(f"New portfolio balance in USD: {new_portfolio_balance}")
     #print(f'new bal with eth: {new_bal_with_eth}')
+
+    start_date = start_date.tz_convert(panama_tz).strftime('%Y-%m-%d %H:00 %Z%z')
+    end_date = end_date.tz_convert(panama_tz).strftime('%Y-%m-%d %H:00 %Z%z')
+    #today = today.tz_convert(panama_tz).strftime('%Y-%m-%d %H:00 %Z%z')
+    print(f'start date for results {start_date}')
+    print(f'end date for results {end_date}')
 
     results = {
         "start date": start_date,

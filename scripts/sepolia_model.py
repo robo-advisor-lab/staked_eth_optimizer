@@ -19,13 +19,15 @@ import torch
 import plotly.graph_objs as go
 import plotly.offline as pyo
 import plotly.colors as pc
+import pytz
+
 
 from scripts.utils import forecast_with_rebalancing_frequency 
 
 class StakedETHEnv(gym.Env):
     def __init__(self, historical_data, rebalancing_frequency, start_date, end_date, assets, seed, compositions, alpha=0.05):
-        self.start_date = pd.to_datetime(start_date)
-        self.end_date = pd.to_datetime(end_date)
+        self.start_date = start_date
+        self.end_date = end_date
         self.rebalancing_frequency = rebalancing_frequency  # In hours
         self.historical_data = historical_data[(historical_data['ds'] >= self.start_date) & (historical_data['ds'] <= self.end_date)]
         self.alpha = alpha
@@ -35,6 +37,9 @@ class StakedETHEnv(gym.Env):
         
         self.num_assets = len(assets)
         self.compositions = compositions  # Store the compositions
+
+        
+       
         self.last_rebalance_time = self.start_date
 
         self.action_space = spaces.Box(low=0, high=1, shape=(self.num_assets,), dtype=np.float32)
@@ -81,7 +86,7 @@ class StakedETHEnv(gym.Env):
         self.prev_prices = self.historical_data.iloc[self.current_step][['RETH', 'SFRXETH', 'WSTETH']].values
         self.portfolio_value = 1.0  # Reset portfolio value at the beginning of each episode
         self.portfolio = np.ones(self.num_assets) / self.num_assets  # Do not initialize the portfolio with any values
-        self.last_rebalance_time = self.start_date - pd.Timedelta(hours=self.rebalancing_frequency)  # Force rebalance at start
+        self.last_rebalance_time = self.start_date   # Force rebalance at start
 
         # Initialize forecast_data
         self.forecast_data = None
@@ -128,6 +133,18 @@ class StakedETHEnv(gym.Env):
         print(f"Step {self.current_step}: Portfolio value updated to {self.portfolio_value}")
 
         current_date = self.historical_data.iloc[self.current_step]['ds']
+
+        #panama_tz = pytz.timezone('America/Panama')
+
+        current_date = current_date.replace(tzinfo=None)  # Convert to timezone-naive
+        # If initializing last_rebalance_time from a timezone-aware source:
+        self.last_rebalance_time = self.start_date.replace(tzinfo=None)
+
+
+
+        print(f'current date {current_date}')
+        print(f'last rebal {self.last_rebalance_time}')
+
         time_since_last_rebalance = (current_date - self.last_rebalance_time).total_seconds() / 3600
         print(f"Step {self.current_step}: Current date: {current_date}, Last rebalance time: {self.last_rebalance_time}, Time since last rebalance: {time_since_last_rebalance} hours")
 
@@ -135,7 +152,7 @@ class StakedETHEnv(gym.Env):
         if self.current_step > 0:
             self.forecast_data = self.generate_forecasts()
 
-        if time_since_last_rebalance >= self.rebalancing_frequency:
+        if time_since_last_rebalance >= self.rebalancing_frequency or self.current_step == 0:
             action = np.clip(action, 0, 1)
             if np.sum(action) == 0:
                 action = np.ones_like(action) / len(action)

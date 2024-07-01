@@ -51,6 +51,9 @@ def forecast_with_prophet(asset_name, df):
     return df_merged
 
 def forecast_with_rebalancing_frequency(asset_name, df, rebalancing_frequency, seed=20):
+    # Ensure the 'ds' column is timezone-naive
+    df['ds'] = df['ds'].dt.tz_localize(None)
+    
     # Prepare the dataframe for Prophet
     random.seed(seed)
     np.random.seed(seed)
@@ -60,17 +63,25 @@ def forecast_with_rebalancing_frequency(asset_name, df, rebalancing_frequency, s
     model = Prophet()
     model.fit(df_prophet)
     
-    # Make a future dataframe for predictions
-    future = model.make_future_dataframe(periods=rebalancing_frequency, freq='d')  # Predicting according to rebalancing frequency
+    # Make a future dataframe for predictions starting from the last date in df_prophet
+    future = model.make_future_dataframe(periods=rebalancing_frequency, freq='h')
     forecast = model.predict(future)
     
     return forecast[['ds', 'yhat']]
 
-def normalize_asset_returns(price_timeseries, start_date, normalize_value=1.0):
+
+def normalize_asset_returns(price_timeseries, start_date, end_date, normalize_value=1.0):
     start_date = pd.to_datetime(start_date)
-    print(f'start date {start_date}')
-    filtered_data = price_timeseries[price_timeseries['ds'] >= start_date].copy()
-    print(f'normalize function filtered data {filtered_data}')
+    end_date = pd.to_datetime(end_date)
+
+    # Adjust start_date to the latest available date in the price_timeseries
+   
+    print(f'Adjusted start date: {start_date}')
+    print(f'End date: {end_date}')
+    
+    # Filter the data based on the adjusted start date and end date
+    filtered_data = price_timeseries[(price_timeseries['ds'] >= start_date) & (price_timeseries['ds'] <= end_date)].copy()
+    print(f'Normalize function filtered data: {filtered_data}')
     
     if filtered_data.empty:
         print("Filtered data is empty after applying start date.")
@@ -85,7 +96,7 @@ def normalize_asset_returns(price_timeseries, start_date, normalize_value=1.0):
         'SFRXETH': [normalize_value],
         'WSTETH': [normalize_value]
     }
-    dates = [filtered_data.iloc[0]['ds']]
+    dates = [start_date]  # Use the original start date for labeling
     
     for i in range(1, len(filtered_data)):
         current_prices = filtered_data.iloc[i][['RETH', 'SFRXETH', 'WSTETH']].astype(np.float64).values
@@ -114,6 +125,8 @@ def normalize_asset_returns(price_timeseries, start_date, normalize_value=1.0):
     normalized_returns_df.set_index('ds', inplace=True)
     
     return normalized_returns_df
+
+
 
 def calculate_cumulative_return(portfolio_values_df):
     """
