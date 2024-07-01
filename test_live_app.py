@@ -563,8 +563,8 @@ def latest_data():
 
     cached_data = cache.get('latest_data')    
     print(f'cached data {cached_data}')
-    print(f"Cached data current date: {cached_data['results']['current date']} (type: {type(cached_data['results']['current date'])})")
-    print(f"Current data version: {data_version_comp} (type: {type(data_version_comp)})")
+    # print(f"Cached data current date: {cached_data['results']['current date']} (type: {type(cached_data['results']['current date'])})")
+    # print(f"Current data version: {data_version_comp} (type: {type(data_version_comp)})")
 
     if cached_data and cached_data['results']['current date'] == data_version_comp:
         print("Using cached data")
@@ -963,18 +963,69 @@ def latest_data():
 
     new_balances = asyncio.run(get_balance())
     current_holdings = {
-            'wsteth': float(new_balances['wsteth']),
-            'reth': float(new_balances['reth']),
-            'sfrxeth': float(new_balances['sfrxeth'])#,
-            #'eth': float(new_balances['eth'])
+            'WSTETH': float(new_balances['wsteth']),
+            'RETH': float(new_balances['reth']),
+            'SFRXETH': float(new_balances['sfrxeth']),
+            "date": end_date 
         }
-    print(f"current holdings: wstETH: {current_holdings['wsteth']}, rETH {current_holdings['reth']}, sfrxETH {current_holdings['sfrxeth']}")
+    print(f'old port values {historical_port_values}')
+    update_portfolio_data(current_holdings)
+    print(f'historical port values {historical_port_values}')
+    def update_portfolio_values(historical_port_values, price_timeseries):
+        """
+        Updates the historical portfolio values based on the latest prices from price_timeseries.
+
+        Parameters:
+            historical_port_values (DataFrame): DataFrame containing historical balances of assets.
+            price_timeseries (DataFrame): DataFrame containing the latest price data for the assets.
+
+        Returns:
+            DataFrame: Updated historical portfolio values with the latest prices applied.
+        """
+        port_values = historical_port_values.copy()
+        # Convert dates to datetime if not already and set as index if not set
+        if port_values.index.name != 'date':
+            port_values['date'] = pd.to_datetime(port_values['date'])
+            port_values.set_index('date', inplace=True)
+
+        if price_timeseries.index.name != 'ds':
+            price_timeseries['ds'] = pd.to_datetime(price_timeseries['ds'])
+            price_timeseries.set_index('ds', inplace=True)
+        print(f'pre-reindexed price timeseries {price_timeseries}')
+        # Ensure the price_timeseries is reindexed to match the dates in historical_port_values
+        price_timeseries = price_timeseries.reindex(port_values.index).fillna(method='ffill')
+        print(f'reindexed price timeseries {price_timeseries}')
+        print(f'historical port values {port_values}')
+
+        # Calculate the USD value of the holdings at each time point
+        assets = ['WSTETH', 'RETH', 'SFRXETH']
+        for asset in assets:
+            price_column = asset.upper()
+            if asset in port_values.columns and price_column in price_timeseries.columns:
+                port_values[f'{asset}_usd'] = port_values[asset] * price_timeseries[price_column]
+
+        # Sum the values to get the total portfolio value at each time point
+        port_values['Total Portfolio Value'] = port_values[[f'{asset}_usd' for asset in assets]].sum(axis=1)
+
+        return port_values
+
+    updated_portfolio_values = update_portfolio_values(historical_port_values, price_timeseries)
+    updated_portfolio_values['Total Portfolio Value'] = updated_portfolio_values['Total Portfolio Value'].round(2)
+    print(updated_portfolio_values[['Total Portfolio Value']])
+
+
+
+
+
+
+    print(f"current holdings: wstETH: {current_holdings['WSTETH']}, rETH {current_holdings['RETH']}, sfrxETH {current_holdings['SFRXETH']}")
 
     print(f"New balances after rebalancing: {new_balances}")
 
     # Convert new balances to USD
     wsteth_bal_usd, reth_bal_usd, sfrxeth_bal_usd = convert_to_usd(new_balances, prices)
-    new_portfolio_balance = wsteth_bal_usd + reth_bal_usd + sfrxeth_bal_usd 
+    #new_portfolio_balance = wsteth_bal_usd + reth_bal_usd + sfrxeth_bal_usd 
+    new_portfolio_balance = float(updated_portfolio_values['Total Portfolio Value'].iloc[-1])
     #new_bal_with_eth = wsteth_bal_usd + reth_bal_usd + sfrxeth_bal_usd + eth_bal_usd
 
     #eth_composition = eth_bal_usd / new_portfolio_balance
@@ -992,32 +1043,31 @@ def latest_data():
     update_historical_data(comp_dict)
     print(f'updated historical data {historical_data}')
 
-    new_portfolio_balance = round(new_portfolio_balance, 2)
+    # new_portfolio_balance = round(new_portfolio_balance, 2)
 
-    portfolio_dict = {
-        "Portfolio Value": new_portfolio_balance,
-        "date": end_date
-    }
+    # portfolio_dict = {
+    #     "Portfolio Value": new_portfolio_balance,
+    #     "date": end_date
+    # }
 
-    print(f'new portfolio {portfolio_dict}')
+    # print(f'new portfolio {portfolio_dict}')
 
-    update_portfolio_data(portfolio_dict)
+    # update_portfolio_data(portfolio_dict)
 
-    print(f'new global portfolio {historical_port_values}')
+    # print(f'new global portfolio {historical_port_values}')
 
-    port_copy = historical_port_values.copy()
-    port_copy.set_index('date', inplace=True)
+    port_copy = updated_portfolio_values['Total Portfolio Value'].copy()
+    #port_copy.set_index('date', inplace=True)
 
-    traces = []
-    for i, column in enumerate(port_copy.columns):
-        trace = go.Scatter(
-            x=port_copy.index,
-            y=port_copy[column],
-            mode='lines',
-            name=column,
-            line=dict(color=color_palette[i % len(color_palette)])
-        )
-        traces.append(trace)
+    
+    trace = go.Scatter(
+        x=port_copy.index,
+        y=port_copy,
+        mode='lines',
+        name='Total Portfolio Value',
+        line=dict(color=color_palette[i % len(color_palette)])
+    )
+        
     
     layout = go.Layout(
         title='Fund Value',
@@ -1026,7 +1076,7 @@ def latest_data():
         legend=dict(x=0.1, y=0.9)
     )
     
-    fig0 = go.Figure(data=traces, layout=layout)
+    fig0 = go.Figure(data=trace, layout=layout)
     graph_json_0 = json.dumps(fig0, cls=PlotlyJSONEncoder)
 
     #print(f'target comp {new_compositions}')
@@ -1115,9 +1165,9 @@ def latest_data():
         "sfrxETH expected return": f"{sfrxeth_expected_return*100:.2f}%",
         "current risk free": f"{current_risk_free*100:.2f}%",
         "address": ACCOUNT_ADDRESS,
-        "wsteth balance": f"{current_holdings['wsteth']}",
-        "reth balance": f"{current_holdings['reth']}",
-        "sfrxeth balance": f"{current_holdings['sfrxeth']}",
+        "wsteth balance": f"{current_holdings['WSTETH']}",
+        "reth balance": f"{current_holdings['RETH']}",
+        "sfrxeth balance": f"{current_holdings['SFRXETH']}",
         "network": network,
         "wsteth price": prices['wsteth_price'],
         "reth price": prices['reth_price'], 
